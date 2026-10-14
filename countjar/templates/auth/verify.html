@@ -2,7 +2,7 @@
 {% block title %}Enter your code · CountJar{% endblock %}
 {% block form %}
 <h1 class="text-3xl font-bold">Check your phone</h1>
-<p class="mt-2 text-muted">We texted a 6-digit code to <span class="font-semibold text-ink">{{ phone }}</span>.</p>
+<p class="mt-2 text-muted">We texted a <span class="whitespace-nowrap">6-digit</span> code to <span class="font-semibold text-ink">{{ phone }}</span>.</p>
 <form method="post" class="mt-8" x-data="otp" x-ref="form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="code" :value="code">
