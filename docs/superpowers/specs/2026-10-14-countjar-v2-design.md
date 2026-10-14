@@ -138,6 +138,17 @@ list (search/filter, create modal with budget meter), counter detail (big number
 24h/7d/30d chart, embed builder with live preview, badge builder, milestones, events table with
 export, settings, danger zone), tokens (show-once), members, workspace settings, account.
 
+## SEO
+
+Goal: be discoverable for "counter API", "hit counter", "view counter badge", "like button
+widget" and similar. Technical SEO in code: per-page titles/descriptions, canonical URLs
+(`SITE_URL`), Open Graph/Twitter cards, JSON-LD (SoftwareApplication, WebAPI, FAQPage,
+Organization), `/robots.txt`, `/sitemap.xml`, `noindex` on private pages, server-rendered
+semantic HTML, small CSS/JS. Keyword landing pages under `/solutions/<slug>` with real content
+and live demos. Optional search-console verification meta tags via env. Off-page work (custom
+domain, Search Console sitemap submission, backlinks) is documented in the docs PR — ranking
+cannot be guaranteed by code alone.
+
 ## Testing
 
 pytest + mongomock; Twilio and outbound HTTP mocked. Unit tests per service module, API auth
