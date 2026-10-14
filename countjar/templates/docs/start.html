@@ -1,0 +1,73 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note %}
+{% set toc = [("how-it-works", "How it works"), ("try-it", "Try it without an account"), ("account", "1. Create an account"), ("counter", "2. Make a counter"), ("count", "3. Count something"), ("show", "4. Show the number"), ("next", "Where to go next")] %}
+{% block content %}
+<h1>Getting started</h1>
+<p class="lead">CountJar gives every number its own URL. Call the URL to change the number, read it back from anywhere, and watch it on a chart. This page takes you from nothing to a working counter in about five minutes.</p>
+
+<h2 id="how-it-works">How it works</h2>
+<p>Every counter lives in a <strong>workspace</strong> and has an address like this:</p>
+{% call code() %}{{ site_url }}/api/v2/<workspace>/<counter>{% endcall %}
+<p>Add an action to the end to change it: <code>/up</code> adds one, <code>/down</code> subtracts one, <code>/set?value=42</code> sets it. Leave the action off to read the current value. Every call returns JSON.</p>
+<p>A counter is either <strong>public</strong> or <strong>private</strong>:</p>
+<ul>
+  <li><strong>Public</strong> counters can be read and counted up by anyone with the URL, which is what you want for page views, like buttons and polls on a website.</li>
+  <li><strong>Private</strong> counters need an <a href="/docs/auth#tokens">API token</a> for every request, which suits sign-ups, sales or anything you count from your own server.</li>
+</ul>
+<p>Subtracting, setting exact values and resetting always need a token, even on public counters.</p>
+
+<h2 id="try-it">Try it without an account</h2>
+<p>The demo counter <code>{{ demo_ws }}/{{ demo_counter }}</code> is open to everyone. Run this in a terminal, then run it again:</p>
+{% call code("bash") %}curl {{ site_url }}/api/v2/{{ demo_ws }}/{{ demo_counter }}/up{% endcall %}
+{% call code("json") %}{
+  "workspace": "{{ demo_ws }}",
+  "name": "{{ demo_counter }}",
+  "type": "count",
+  "visibility": "public",
+  "count": 1285,
+  "counted": true,
+  "created_at": "2026-10-14T08:00:00Z",
+  "updated_at": "2026-10-14T09:12:44Z"
+}{% endcall %}
+<p>It's shared with everyone reading this page, so expect the number to move. To keep your own counters you need an account.</p>
+
+<h2 id="account">1. Create an account</h2>
+<p>CountJar has no passwords. <a href="{{ url_for('auth.login') }}">Sign in</a> with your mobile number and we text you a 6-digit code. Enter it, choose your name and your first workspace's address (for example <code>acme</code>), and you're in. <a href="/docs/auth">Accounts and tokens</a> explains sign-in in more detail.</p>
+
+<h2 id="counter">2. Make a counter</h2>
+<p>In the dashboard, open <strong>Counters</strong> and choose <strong>New counter</strong>. Give it a name such as <code>visits</code> and pick a type:</p>
+<div class="doc-table"><table>
+  <thead><tr><th>Type</th><th>What it counts</th></tr></thead>
+  <tbody>
+    <tr><td>Counter</td><td>Anything you add to or subtract from: views, downloads, sign-ups.</td></tr>
+    <tr><td>Like</td><td>One like per visitor, with a heart button widget.</td></tr>
+    <tr><td>Poll</td><td>Yes or no votes, one per visitor, with live percentages.</td></tr>
+    <tr><td>Rating</td><td>1 to 5 stars, one rating per visitor, with the average.</td></tr>
+  </tbody>
+</table></div>
+<p>You can also set a step size, a minimum and maximum, and <a href="/docs/api#unique">unique-visitor counting</a> so each visitor only counts once a day or once ever. Every account can keep 5 counters.</p>
+
+<h2 id="count">3. Count something</h2>
+<p>Call the counter's URL with <code>/up</code>. For a public counter that's all you need:</p>
+{% call code("bash") %}curl {{ site_url }}/api/v2/acme/visits/up{% endcall %}
+<p>For a private counter, create a token under <strong>API tokens</strong> and send it in the <code>Authorization</code> header:</p>
+{% call code("bash") %}curl -H "Authorization: Bearer cj_your_token" \
+  {{ site_url }}/api/v2/acme/signups/up{% endcall %}
+{% call note("warn") %}Treat tokens like passwords. Only use them from your server, scripts or CI, never in code that runs in a visitor's browser.{% endcall %}
+
+<h2 id="show">4. Show the number</h2>
+<p>Paste a widget into any web page. It counts the visit and shows the total:</p>
+{% call code("html") %}<div class="countjar" data-workspace="acme" data-counter="visits"></div>
+<script src="{{ site_url }}/embed.js" async></script>{% endcall %}
+<p>Or add a badge to a GitHub README:</p>
+{% call code("markdown") %}![views]({{ site_url }}/badge/acme/visits.svg){% endcall %}
+<p>The <strong>Embed</strong> tab on each counter builds these snippets for you, with a live preview.</p>
+
+<h2 id="next">Where to go next</h2>
+<ul>
+  <li><a href="/docs/api">API reference</a>: every endpoint and parameter.</li>
+  <li><a href="/docs/integrations">Code examples</a>: JavaScript, Python, React, Next.js, Go, PHP and more.</li>
+  <li><a href="/docs/widgets">Widgets and badges</a>: like buttons, polls, ratings, badge styles and the tracking pixel.</li>
+  <li><a href="/docs/milestones">Milestone alerts</a>: get a webhook or a text when a counter hits a number.</li>
+</ul>
+{% endblock %}

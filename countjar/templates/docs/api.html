@@ -1,0 +1,229 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note, params %}
+{% set toc = [("basics", "Basics"), ("counter-object", "The counter object"), ("read", "Read a counter"), ("up", "Count up"), ("down", "Count down"), ("set", "Set a value"), ("reset", "Reset"), ("like", "Like"), ("vote", "Vote"), ("rate", "Rate"), ("unique", "Unique visitors"), ("props", "Custom properties"), ("stats", "Stats"), ("history", "History"), ("events", "Events"), ("workspace", "Workspace summary"), ("create", "Create a counter"), ("update", "Change a counter"), ("delete", "Delete a counter")] %}
+{% set base = site_url ~ "/api/v2" %}
+{% block content %}
+<h1>API reference</h1>
+<p class="lead">Every endpoint in the CountJar API, what it needs and what it returns. All URLs start with <code>{{ base }}</code>.</p>
+
+<h2 id="basics">Basics</h2>
+<ul>
+  <li><strong>Addresses.</strong> A counter's URL is <code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;</code>. Actions go on the end, like <code>/up</code> or <code>/stats</code>.</li>
+  <li><strong>Methods.</strong> Counting actions accept <code>GET</code> or <code>POST</code>, so a plain link, an image tag or a <code>fetch</code> call all work. Reading endpoints are <code>GET</code> only.</li>
+  <li><strong>Parameters.</strong> Send them in the query string, as a form body, or as a JSON object with <code>Content-Type: application/json</code>.</li>
+  <li><strong>Auth.</strong> Public counters can be read and counted up without a token. Everything else needs one; see <a href="/docs/auth#who-needs">when you need a token</a>.</li>
+  <li><strong>Responses.</strong> Always JSON, never cached (<code>Cache-Control: no-store</code>). Errors use <a href="/docs/limits#errors">one shape</a> with a stable <code>code</code>.</li>
+  <li><strong>Browsers.</strong> The API sends <code>Access-Control-Allow-Origin: *</code>, so you can call it from any website. It never reads cookies.</li>
+  <li><strong>Times.</strong> Timestamps are ISO 8601 in UTC, for example <code>2026-10-14T09:12:44Z</code>.</li>
+</ul>
+
+<h2 id="counter-object">The counter object</h2>
+<p>Most endpoints return the counter like this:</p>
+{% call code("json") %}{
+  "workspace": "acme",
+  "name": "visits",
+  "type": "count",
+  "visibility": "public",
+  "description": "Homepage views",
+  "count": 1285,
+  "created_at": "2026-10-01T08:00:00Z",
+  "updated_at": "2026-10-14T09:12:44Z"
+}{% endcall %}
+<p>Poll counters add <code>yes</code>, <code>no</code> and <code>yes_pct</code>. Rating counters add <code>ratings</code> (how many people rated) and <code>average</code> (to two decimal places). For polls and ratings, <code>count</code> is the number of votes or ratings.</p>
+<p>Counting actions also return <code>"counted": true</code> or <code>false</code>. It's <code>false</code> when nothing changed: the visitor was already counted, or the counter is at its minimum or maximum.</p>
+
+<h2 id="read">Read a counter</h2>
+<h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;</code></h3>
+<p>Returns the counter object. Private counters need a <code>read</code> token.</p>
+{{ params([
+  ("window", "Optional. Also return activity in a recent window: <code>15m</code>, <code>6h</code>, <code>7d</code> and so on, up to <code>90d</code>."),
+]) }}
+{% call code("bash") %}curl "{{ base }}/acme/visits?window=24h"{% endcall %}
+{% call code("json") %}{
+  "workspace": "acme",
+  "name": "visits",
+  "count": 1285,
+  "window": { "range": "24h", "count": 112, "events": 112, "unique": 87 },
+  ...
+}{% endcall %}
+<p>In <code>window</code>, <code>count</code> is the net change in that window, <code>events</code> is how many changes there were, and <code>unique</code> is how many different visitors made them.</p>
+
+<h2 id="up">Count up</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/up</code></h3>
+<p>Adds the counter's step size (1 unless you changed it). Anyone can count up a public counter. Private counters need a <code>write</code> token.</p>
+{{ params([
+  ("by", "Optional. Add this amount instead of the step size, from 1 to 1,000,000. Needs a <code>write</code> token, even on public counters."),
+]) }}
+{% call code("bash") %}curl -X POST {{ base }}/acme/visits/up{% endcall %}
+<p>If the counter has a maximum, it stops there and further calls return <code>"counted": false</code>.</p>
+
+<h2 id="down">Count down</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/down</code></h3>
+<p>Subtracts the step size, or <code>by</code>. Always needs a <code>write</code> token. Stops at the counter's minimum if it has one; counters without a minimum can go negative.</p>
+{% call code("bash") %}curl -H "Authorization: Bearer cj_your_token" \
+  "{{ base }}/acme/seats-left/down?by=2"{% endcall %}
+
+<h2 id="set">Set a value</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/set</code></h3>
+<p>Sets the counter to an exact number. Needs a <code>write</code> token.</p>
+{{ params([
+  ("value", "Required. A whole number within the counter's minimum and maximum."),
+]) }}
+{% call code("bash") %}curl -H "Authorization: Bearer cj_your_token" \
+  "{{ base }}/acme/stock/set?value=42"{% endcall %}
+<p>A value outside the counter's range returns <code>400</code> with the code <code>out_of_bounds</code>.</p>
+
+<h2 id="reset">Reset</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/reset</code></h3>
+<p>Puts the counter back to 0, or to its minimum if that's above 0. Polls and ratings go back to no votes. Needs a <code>write</code> token.</p>
+<p>Reset also forgets who has been counted, so every visitor can count, like, vote or rate again. History, stats and events are kept.</p>
+
+<h2 id="like">Like</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/like</code></h3>
+<p>For <strong>like</strong> counters. Adds one like, once per visitor. A second like from the same visitor returns <code>"counted": false</code>. Like counters also accept <code>up</code>, <code>down</code>, <code>set</code> and <code>reset</code>, with the same rules as normal counters.</p>
+
+<h2 id="vote">Vote</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/vote</code></h3>
+<p>For <strong>poll</strong> counters. One vote per visitor.</p>
+{{ params([
+  ("choice", "Required. <code>yes</code> or <code>no</code>."),
+]) }}
+{% call code("bash") %}curl -X POST "{{ base }}/acme/helpful/vote?choice=yes"{% endcall %}
+{% call code("json") %}{ "name": "helpful", "type": "poll", "count": 41, "yes": 33, "no": 8, "yes_pct": 80.5, "counted": true, ... }{% endcall %}
+
+<h2 id="rate">Rate</h2>
+<h3><span class="method method-get">GET</span><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/rate</code></h3>
+<p>For <strong>rating</strong> counters. One rating per visitor.</p>
+{{ params([
+  ("value", "Required. Stars from 1 to 5."),
+]) }}
+{% call code("json") %}{ "name": "docs-rating", "type": "rating", "count": 18, "ratings": 18, "average": 4.39, "counted": true, ... }{% endcall %}
+
+<h2 id="unique">Unique visitors</h2>
+<p>Set a counter's <strong>unique</strong> option to stop the same visitor from counting up again and again:</p>
+<div class="doc-table"><table>
+  <thead><tr><th>Option</th><th>Effect on <code>up</code></th></tr></thead>
+  <tbody>
+    <tr><td><code>none</code></td><td>Every call counts. This is the default.</td></tr>
+    <tr><td><code>daily</code></td><td>Each visitor counts once per day (UTC).</td></tr>
+    <tr><td><code>once</code></td><td>Each visitor counts once, ever, until the counter is reset.</td></tr>
+  </tbody>
+</table></div>
+<p>A visitor is recognised by a keyed fingerprint of their IP address and browser. CountJar never stores the IP address itself. Likes, votes and ratings are always one per visitor, whatever this option says.</p>
+{% call note() %}If you count from your own server, every request comes from the same IP, so unique counting would treat all your users as one visitor. Use <code>none</code> for server-side counters.{% endcall %}
+
+<h2 id="props">Custom properties</h2>
+<p>Any extra query parameter on a counting action is saved with that event, so you can tell where counts came from later:</p>
+{% call code("bash") %}curl "{{ base }}/acme/downloads/up?version=2.1&platform=mac"{% endcall %}
+<p>Names can use letters, digits and underscores, up to 32 characters. Values are kept as text, up to 200 characters, and up to 10 properties are saved per event. These names are reserved and never saved: <code>token</code>, <code>by</code>, <code>value</code>, <code>choice</code>, <code>window</code>, <code>format</code>, <code>range</code> and <code>limit</code>.</p>
+<p>Filter <a href="#events">events</a> by a property with <code>?filter=platform=mac</code>.</p>
+
+<h2 id="stats">Stats</h2>
+<h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/stats</code></h3>
+<p>A summary of recent activity. Private counters need a <code>read</code> token.</p>
+{% call code("json") %}{
+  "workspace": "acme",
+  "name": "visits",
+  "count": 1285,
+  "total_ups": 1290,
+  "total_downs": 5,
+  "today": 64,
+  "last_24h": 112,
+  "last_7d": 803,
+  "unique_24h": 87,
+  "unique_7d": 512,
+  "events_24h": 112,
+  "created_at": "2026-10-01T08:00:00Z",
+  "updated_at": "2026-10-14T09:12:44Z"
+}{% endcall %}
+<p><code>today</code> starts at 00:00 UTC.</p>
+
+<h2 id="history">History</h2>
+<h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/history</code></h3>
+<p>A time series for charts, with empty periods filled in as zero. Private counters need a <code>read</code> token.</p>
+{{ params([
+  ("range", "<code>24h</code> (hourly, the default), <code>7d</code>, <code>30d</code> or <code>90d</code> (daily)."),
+  ("format", "<code>csv</code> to download a spreadsheet instead of JSON."),
+]) }}
+{% call code("json") %}{
+  "workspace": "acme",
+  "name": "visits",
+  "range": "7d",
+  "series": [
+    { "t": "2026-10-08T00:00:00Z", "ups": 98, "downs": 0, "net": 98, "events": 98 },
+    { "t": "2026-10-09T00:00:00Z", "ups": 121, "downs": 2, "net": 119, "events": 123 },
+    ...
+  ]
+}{% endcall %}
+
+<h2 id="events">Events</h2>
+<h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/events</code></h3>
+<p>The individual changes, newest first. Needs a <code>read</code> token, even for public counters, because events include referrers and custom properties.</p>
+{{ params([
+  ("limit", "How many to return, from 1 to 1,000. Defaults to 100."),
+  ("filter", "Only events with this custom property, written <code>name=value</code>."),
+  ("format", "<code>csv</code> to download a spreadsheet instead of JSON."),
+]) }}
+{% call code("json") %}{
+  "workspace": "acme",
+  "name": "downloads",
+  "events": [
+    {
+      "ts": "2026-10-14T09:12:44Z",
+      "action": "up",
+      "delta": 1,
+      "value": null,
+      "visitor": "3f9a1c07be52",
+      "referrer": "github.com",
+      "props": { "version": "2.1", "platform": "mac" }
+    }
+  ]
+}{% endcall %}
+<p><code>visitor</code> is a shortened fingerprint, useful for spotting repeat visitors. <code>referrer</code> is only the host name of the page the request came from.</p>
+
+<h2 id="workspace">Workspace summary</h2>
+<h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;</code></h3>
+<p>Totals and every counter in a workspace. Without a token you only see public counters; with a <code>read</code> token you see them all.</p>
+{% call code("json") %}{
+  "workspace": "acme",
+  "total": 4210,
+  "active_24h": 3,
+  "events_24h": 288,
+  "unique_24h": 140,
+  "top": [ { "name": "visits", "count": 1285 }, ... ],
+  "counters": [ { "name": "visits", "count": 1285, ... }, ... ]
+}{% endcall %}
+<p><code>total</code> adds up counter and like counters only, since polls and ratings measure something different.</p>
+
+<h2 id="create">Create a counter</h2>
+<h3><span class="method method-post">POST</span><code>/api/v2/&lt;workspace&gt;/counters</code></h3>
+<p>Needs an <code>admin</code> token. Send a JSON object:</p>
+{{ params([
+  ("name", "Required. 1 to 64 lowercase letters, digits, <code>-</code> or <code>_</code>. Unique in the workspace."),
+  ("type", "<code>count</code> (default), <code>like</code>, <code>poll</code> or <code>rating</code>. Can't be changed later."),
+  ("visibility", "<code>public</code> (default) or <code>private</code>."),
+  ("description", "Up to 200 characters, shown in the dashboard."),
+  ("step", "How much <code>up</code> and <code>down</code> change the count, from 1 to 1,000,000. Defaults to 1."),
+  ("min, max", "Optional limits. Counting up stops at <code>max</code> and counting down stops at <code>min</code>."),
+  ("unique", "<code>none</code> (default), <code>daily</code> or <code>once</code>. See <a href=\"#unique\">unique visitors</a>."),
+  ("start", "The starting count. Defaults to 0 and must be within <code>min</code> and <code>max</code>."),
+]) }}
+{% call code("bash") %}curl -X POST {{ base }}/acme/counters \
+  -H "Authorization: Bearer cj_your_admin_token" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "seats-left", "start": 50, "min": 0, "max": 50, "visibility": "private"}'{% endcall %}
+<p>Returns <code>201</code> with the counter object. You get <code>409</code> if the name is taken and <code>403</code> with the code <code>counter_limit</code> if you've used all 5 counters.</p>
+
+<h2 id="update">Change a counter</h2>
+<h3><span class="method method-patch">PATCH</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;</code></h3>
+<p>Needs an <code>admin</code> token. Send only the fields you want to change: <code>visibility</code>, <code>description</code>, <code>step</code>, <code>min</code>, <code>max</code> or <code>unique</code>. Send <code>null</code> for <code>min</code> or <code>max</code> to remove the limit. Changing a limit doesn't move the current count, so if it's now out of range, <a href="#set">set</a> it.</p>
+{% call code("bash") %}curl -X PATCH {{ base }}/acme/visits \
+  -H "Authorization: Bearer cj_your_admin_token" \
+  -H "Content-Type: application/json" \
+  -d '{"unique": "daily"}'{% endcall %}
+
+<h2 id="delete">Delete a counter</h2>
+<h3><span class="method method-delete">DELETE</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;</code></h3>
+<p>Needs an <code>admin</code> token. Deletes the counter with all its history, events and milestones, and frees the slot for a new one. Returns <code>204</code> with no body.</p>
+{% call note("warn") %}Deleting can't be undone. If you only want to start from zero, use <a href="#reset">reset</a> instead.{% endcall %}
+{% endblock %}

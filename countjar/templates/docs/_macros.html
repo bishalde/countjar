@@ -1,0 +1,33 @@
+{% macro code(lang="") -%}
+<div class="doc-code group relative" x-data>
+  <pre class="code-block pr-20"{% if lang %} data-lang="{{ lang }}"{% endif %}><code x-ref="c">{{ caller() | trim | code_text }}</code></pre>
+  <button type="button" class="doc-copy" @click="cjCopy($refs.c.innerText, 'Code')">Copy</button>
+</div>
+{%- endmacro %}
+
+{% macro note(kind="info") -%}
+<div class="doc-note doc-note-{{ kind }}" role="note">{{ caller() }}</div>
+{%- endmacro %}
+
+{# Tabbed code samples. `tabs` is a list of (key, label); each panel is a {% call %} block per key. #}
+{% macro tabbed(tabs, first) -%}
+<div class="doc-tabs" x-data="{ t: {{ first | tojson | forceescape }} }">
+  <div class="doc-tablist" role="tablist">
+    {% for key, label in tabs %}
+    <button type="button" role="tab" :aria-selected="t === {{ key | tojson | forceescape }}" @click="t = {{ key | tojson | forceescape }}">{{ label }}</button>
+    {% endfor %}
+  </div>
+  {{ caller() }}
+</div>
+{%- endmacro %}
+
+{% macro panel(key) -%}
+<div x-cloak x-show="t === {{ key | tojson | forceescape }}">{{ caller() }}</div>
+{%- endmacro %}
+
+{% macro params(rows) -%}
+<div class="doc-table"><table>
+  <thead><tr><th>Parameter</th><th>Description</th></tr></thead>
+  <tbody>{% for name, desc in rows %}<tr><td><code>{{ name }}</code></td><td>{{ desc | safe }}</td></tr>{% endfor %}</tbody>
+</table></div>
+{%- endmacro %}

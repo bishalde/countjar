@@ -108,6 +108,42 @@
   .odo-strip { display: flex; flex-direction: column; transition: transform .7s cubic-bezier(.2, .9, .25, 1.15); }
   .odo-strip span { height: 1em; display: block; text-align: center; }
   .odo-sep { display: inline-block; height: 1em; line-height: 1; font-family: var(--font-sans); margin-inline: .02em; }
+
+  /* Docs: long-form reading, so a 70ch measure and generous rhythm. */
+  .doc { max-width: 46rem; @apply text-[15.5px] leading-7 text-ink; }
+  .doc > h1 { @apply text-4xl font-extrabold leading-tight tracking-[-0.025em] sm:text-[2.6rem]; }
+  .doc > .lead { @apply mt-4 text-lg leading-8 text-muted; }
+  .doc h2 { @apply mt-14 scroll-mt-6 border-t border-line pt-8 text-2xl font-bold tracking-[-0.015em]; }
+  .doc h3 { @apply mt-9 scroll-mt-6 text-lg font-semibold; }
+  .doc p, .doc ul, .doc ol, .doc .doc-code, .doc .doc-table, .doc .doc-note, .doc .doc-tabs { @apply mt-4; }
+  .doc ul { @apply list-disc space-y-1.5 pl-5 marker:text-muted; }
+  .doc ol { @apply list-decimal space-y-1.5 pl-5 marker:text-muted; }
+  .doc a:not(.btn) { @apply font-medium text-honey-text underline decoration-honey/40 underline-offset-2 hover:decoration-honey; }
+  .doc :not(pre) > code { @apply rounded-md bg-sunken px-1.5 py-0.5 font-mono text-[0.86em]; }
+  .doc strong { @apply font-semibold; }
+  .doc-code pre { @apply m-0; }
+  .doc-copy { @apply absolute right-2.5 top-2.5 rounded-md border border-white/15 px-2 py-1 text-xs font-medium text-code-ink/80 opacity-0 transition group-hover:opacity-100 hover:bg-white/10 focus-visible:opacity-100; }
+  @media (hover: none) { .doc-copy { opacity: 1; } }
+  .doc-note { @apply rounded-xl border px-4 py-3 text-[14.5px] leading-6; }
+  .doc-note-info { @apply border-line bg-sunken/60; }
+  .doc-note-warn { @apply border-honey/50 bg-honey/10; }
+  .doc-table { @apply overflow-x-auto rounded-xl border border-line; }
+  .doc-table table { @apply w-full text-left text-sm; }
+  .doc-table th { @apply bg-sunken/60 px-4 py-2.5 font-medium text-muted; }
+  .doc-table td { @apply border-t border-line px-4 py-2.5 align-top; }
+  .doc-table td:first-child { @apply whitespace-nowrap; }
+  .doc-tabs .doc-code { @apply mt-0; }
+  .doc-tablist { @apply flex gap-1 overflow-x-auto rounded-t-xl bg-code px-2 pt-2; }
+  .doc-tablist button { @apply whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-code-ink/60 hover:text-code-ink; }
+  .doc-tablist button[aria-selected="true"] { @apply bg-white/10 text-code-ink; }
+  .doc-tabs .code-block { @apply rounded-t-none; }
+  .doc-nav { @apply block rounded-lg px-3 py-1.5 text-muted hover:bg-sunken hover:text-ink; }
+  .doc-nav.is-active { @apply bg-honey/15 font-medium text-ink; }
+  .method { @apply mr-2 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold; }
+  .method-get { @apply bg-mint/15 text-mint; }
+  .method-post { @apply bg-honey/20 text-honey-text; }
+  .method-patch { @apply bg-sunken text-ink; }
+  .method-delete { @apply bg-coral/15 text-coral; }
 }
 
 @media (prefers-reduced-motion: reduce) {

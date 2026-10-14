@@ -132,7 +132,7 @@ def site_url():
 
 # ---------- CountJar counting its own visitors ----------
 
-COUNTED_PAGES = {"site.landing", "site.solution", "site.pricing"}
+COUNTED_PAGES = {"site.landing", "site.solution", "site.pricing", "docs.page"}
 BOT = re.compile(r"bot|crawl|spider|slurp|preview|monitor|curl|wget|python-requests|headless", re.I)
 
 
@@ -227,6 +227,8 @@ def robots():
 def sitemap_urls():
     urls = [("/", "1.0", "weekly"), ("/pricing", "0.6", "monthly")]
     urls += [(f"/solutions/{k}", "0.8", "monthly") for k in SOLUTIONS]
+    from .docs import PAGES, url
+    urls += [(url(p[0]), "0.7", "monthly") for p in PAGES]
     return urls
 
 
