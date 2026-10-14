@@ -31,7 +31,12 @@ def _twilio(path, data):
     except requests.RequestException as e:
         log.warning("Twilio Verify request failed: %s", e)
         raise VerifyError("Couldn't reach the verification service. Try again.") from e
-    body = resp.json() if resp.content else {}
+    try:
+        body = resp.json() if resp.content else {}
+    except ValueError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
     if resp.status_code >= 400:
         log.warning("Twilio Verify %s -> %s %s", path, resp.status_code, body.get("message"))
         if resp.status_code == 404 and path == "VerificationCheck":

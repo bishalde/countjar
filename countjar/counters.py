@@ -66,7 +66,7 @@ def _int_or_none(v, field):
         return None
     try:
         n = int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise CounterError("invalid_setting", f"{field} must be a whole number.") from None
     if abs(n) > BOUND:
         raise CounterError("invalid_setting", f"{field} is too large.")
@@ -106,7 +106,7 @@ def clean_settings(data, current=None):
 
 
 def create_counter(ws, name, **data):
-    name = (name or "").strip().lower()
+    name = name.strip().lower() if isinstance(name, str) else ""
     if not config.SLUG.match(name):
         raise CounterError("invalid_name",
                            "Counter names use 1–64 lowercase letters, digits, - or _.")
@@ -128,6 +128,13 @@ def create_counter(ws, name, **data):
         doc["_id"] = db.col("counters").insert_one(doc).inserted_id
     except DuplicateKeyError:
         raise CounterError("exists", f"A counter named “{name}” already exists here.", 409) from None
+    # Two requests at once can both pass the budget check; recount and back out.
+    if not is_demo(ws) and accounts.owned_counter_count(ws["owner_id"]) > current_app.config["COUNTER_LIMIT"]:
+        db.col("counters").delete_one({"_id": doc["_id"]})
+        raise CounterError(
+            "counter_limit",
+            f"You've used all {current_app.config['COUNTER_LIMIT']} counters in your plan. "
+            "Delete one to create another.", 403)
     return doc
 
 
@@ -162,7 +169,7 @@ def clean_props(args, reserved=()):
 def _int_arg(v, field, lo, hi):
     try:
         n = int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise CounterError("invalid_value", f"{field} must be a whole number.") from None
     if not lo <= n <= hi:
         raise CounterError("invalid_value", f"{field} must be between {lo:,} and {hi:,}.")
@@ -217,19 +224,21 @@ def apply(ws, counter, action, *, by=None, value=None, choice=None,
             if not _claim_mark(counter, kind, visitor, timedelta(days=2) if daily else None):
                 return Result(counter, False)
         signed = delta if action == "up" else -delta
-        doc = col.find_one_and_update(
+        lo_b, hi_b = (-BOUND if lo is None else lo), (BOUND if hi is None else hi)
+        # One atomic pipeline update adds and clamps, so the stored count never leaves its bounds.
+        before = col.find_one_and_update(
             {"_id": cid},
-            {"$inc": {"count": signed, "ups" if action == "up" else "downs": delta},
-             "$set": {"updated_at": ts}},
+            [{"$set": {"count": {"$min": [hi_b, {"$max": [lo_b, {"$add": ["$count", signed]}]}]},
+                       "updated_at": ts}}],
+            return_document=ReturnDocument.BEFORE)
+        old = before["count"]
+        new_count = min(hi_b, max(lo_b, old + signed))
+        if new_count == old:
+            return Result(before, False)
+        doc = col.find_one_and_update(
+            {"_id": cid}, {"$inc": {"ups" if new_count > old else "downs": abs(new_count - old)}},
             return_document=ReturnDocument.AFTER)
-        old = doc["count"] - signed  # value just before our atomic $inc
-        # Clamp to bounds; a conditional write keeps concurrent hits from overshooting.
-        if hi is not None and doc["count"] > hi:
-            col.update_one({"_id": cid, "count": {"$gt": hi}}, {"$set": {"count": hi}})
-            doc["count"] = hi
-        if lo is not None and doc["count"] < lo:
-            col.update_one({"_id": cid, "count": {"$lt": lo}}, {"$set": {"count": lo}})
-            doc["count"] = lo
+        doc["count"] = new_count  # our own result, even if another hit landed in between
         record_value = None
     elif action == "set":
         if value is None:
@@ -254,7 +263,8 @@ def apply(ws, counter, action, *, by=None, value=None, choice=None,
                                          return_document=ReturnDocument.BEFORE)
         old = before["count"]
         doc = {**before, **fields}
-        db.col("marks").delete_many({"counter_id": cid, "kind": {"$in": ["like", "vote", "rate"]}})
+        db.col("marks").delete_many({"counter_id": cid, "$or": [
+            {"kind": {"$in": ["like", "vote", "rate", "u"]}}, {"kind": {"$regex": "^u:"}}]})
         record_value = target
     elif action == "like":
         if not _claim_mark(counter, "like", visitor):

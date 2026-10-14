@@ -1,3 +1,5 @@
+import pytest
+
 from countjar import counters
 
 
@@ -143,3 +145,31 @@ def test_session_cookie_is_not_api_auth(client, ctx):
     ws = accounts.get_workspace("mine")
     counters.create_counter(ws, "p", visibility="private")
     assert client.get("/api/v2/mine/p").status_code == 401
+
+
+@pytest.mark.parametrize("body", ["[1, 2]", '"name"', "5"])
+def test_non_object_json_body_is_400(client, ws, token_factory, body):
+    tok = token_factory("admin")
+    r = client.post("/api/v2/acme/counters", data=body, content_type="application/json",
+                    headers=auth(tok))
+    assert r.status_code == 400 and r.json["error"]["code"] == "invalid_body"
+    counters.create_counter(ws, "p")
+    r = client.patch("/api/v2/acme/p", data=body, content_type="application/json", headers=auth(tok))
+    assert r.status_code == 400
+
+
+def test_non_object_json_params_are_ignored(client, counter):
+    r = client.post("/api/v2/acme/visits/up", data="[1]", content_type="application/json")
+    assert r.status_code == 200 and r.json["count"] == 1
+
+
+def test_counter_budget_holds_when_requests_race(app, ws):
+    # Simulate a racing request that slipped past the budget check.
+    for i in range(app.config["COUNTER_LIMIT"]):
+        counters.create_counter(ws, f"r{i}")
+    from unittest import mock
+    from countjar import accounts
+    with mock.patch.object(accounts, "budget", return_value={"used": 0, "limit": 5, "left": 5}):
+        with pytest.raises(counters.CounterError):
+            counters.create_counter(ws, "extra")
+    assert accounts.owned_counter_count(ws["owner_id"]) == app.config["COUNTER_LIMIT"]

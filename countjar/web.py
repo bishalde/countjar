@@ -2,11 +2,13 @@
 from flask import (Blueprint, abort, flash, jsonify, make_response, redirect, render_template,
                    request, session, url_for)
 
-from . import accounts, config, counters, notify, stats, tokens
+from . import accounts, config, counters, notify, ratelimit, stats, tokens
 from .accounts import AccountError, current_user, login_required
 from .counters import CounterError
 
 bp = Blueprint("web", __name__, url_prefix="/app")
+
+MEMBER_ADDS_PER_HOUR = 20
 
 
 @bp.after_request
@@ -133,8 +135,7 @@ def counter_detail(ws_slug, name):
                stats=stats.counter_stats(counter), milestones=notify.list_milestones(counter),
                referrers=stats.top_referrers(counter["_id"]),
                events=stats.event_rows(stats.recent_events([counter["_id"]], 50, prop_filter)),
-               prop_filter=prop_filter or "",
-               member_phones=[m["user"]["phone"] for m in accounts.members(ws)])
+               prop_filter=prop_filter or "")
     return page("app/counter.html", ws, role, **ctx)
 
 
@@ -206,7 +207,10 @@ def counter_export(ws_slug, name, fmt):
     counter = counter_or_404(ws, name)
     kind = request.args.get("kind", "events")
     if kind == "history":
-        rows = stats.history(counter["_id"], request.args.get("range", "30d"))
+        try:
+            rows = stats.history(counter["_id"], request.args.get("range", "30d"))
+        except stats.StatsError as e:
+            abort(400, description=str(e))
         fields = ["t", "ups", "downs", "net", "events"]
     else:
         rows = stats.event_rows(stats.recent_events([counter["_id"]], 5000,
@@ -231,7 +235,8 @@ def milestone_add(ws_slug, name):
     counter = counter_or_404(ws, name)
     f = request.form
     try:
-        notify.add_milestone(ws, counter, f.get("threshold"), f.get("channel"), f.get("target"))
+        notify.add_milestone(ws, counter, f.get("threshold"), f.get("channel"), f.get("target"),
+                             user=current_user())
         flash("Milestone added.", "success")
     except notify.MilestoneError as e:
         flash(str(e), "error")
@@ -260,6 +265,7 @@ def token_list(ws_slug):
     ws, role = workspace_or_404(ws_slug)
     new_token = None
     if request.method == "POST":
+        owner_only(role)
         try:
             doc, new_token = tokens.create_token(ws, current_user(), request.form.get("name"),
                                                  request.form.getlist("scopes"))
@@ -271,7 +277,8 @@ def token_list(ws_slug):
 @bp.post("/<ws_slug>/tokens/<token_id>/revoke")
 @login_required
 def token_revoke(ws_slug, token_id):
-    ws, _ = workspace_or_404(ws_slug)
+    ws, role = workspace_or_404(ws_slug)
+    owner_only(role)
     if tokens.revoke(ws, token_id):
         flash("Token revoked. Apps using it will stop working immediately.", "success")
     return redirect(url_for("web.token_list", ws_slug=ws_slug))
@@ -285,6 +292,10 @@ def member_list(ws_slug):
     ws, role = workspace_or_404(ws_slug)
     if request.method == "POST":
         owner_only(role)
+        # Each try reveals whether a number has an account, so keep lookups slow.
+        if not ratelimit.hit(f"member-add:{current_user()['_id']}", MEMBER_ADDS_PER_HOUR, 3600).allowed:
+            flash("You've added a lot of people this hour. Try again later.", "error")
+            return redirect(url_for("web.member_list", ws_slug=ws_slug))
         try:
             u = accounts.add_member(ws, request.form.get("phone"))
             flash(f"Added {u.get('name') or u['phone']}.", "success")

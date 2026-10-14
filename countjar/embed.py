@@ -1,6 +1,6 @@
 """Embeds that work without a token on public counters: widget script, SVG badge, pixel."""
 import base64
-from xml.sax.saxutils import escape
+from html import escape
 
 from flask import Blueprint, current_app, make_response, request, send_from_directory
 
@@ -72,7 +72,7 @@ def _w(text, size=11):
 
 
 def render_badge(label, value, style, label_color, color):
-    label, value = escape(label), escape(value)
+    label, value = escape(label, quote=True), escape(value, quote=True)  # also used in attributes
     if style == "big":
         lw, vw = _w(label, 12), _w(value, 18) + 8
         w, h = lw + vw, 36
@@ -116,6 +116,8 @@ def badge(ws_slug, name):
                        color)
     resp = make_response(svg)
     resp.headers["Content-Type"] = "image/svg+xml; charset=utf-8"
+    # If someone opens the badge URL directly, nothing in it may run as this site.
+    resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
     # GitHub's image proxy honours this, so README badges stay fresh.
     resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
     return resp

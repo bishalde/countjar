@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from countjar import counters, db, notify, ratelimit, stats, tokens
+from countjar import accounts, counters, db, notify, ratelimit, stats, tokens
 from tests.conftest import make_user
 
 
@@ -55,7 +55,9 @@ def public_dns(*a, **k):
 
 
 @pytest.mark.parametrize("url", ["http://example.com/h", "https://127.0.0.1/h", "https://10.0.0.1/x",
-                                 "https://169.254.169.254/latest", "ftp://x"])
+                                 "https://169.254.169.254/latest", "ftp://x",
+                                 "https://x.com:99999/h", "https://example.com:8443/h",
+                                 "https://" + "a" * 70 + ".com/h"])
 def test_webhook_url_rejects_private_and_non_https(url):
     with pytest.raises(notify.MilestoneError):
         notify.validate_webhook_url(url)
@@ -65,24 +67,22 @@ def test_milestone_fires_once_and_signs(ws, counter):
     with mock.patch("socket.getaddrinfo", public_dns):
         m = notify.add_milestone(ws, counter, 2, "webhook", "https://hooks.example.com/x")
     with mock.patch("socket.getaddrinfo", public_dns), \
-            mock.patch("countjar.notify.requests.post") as post:
-        post.return_value.status_code = 200
+            mock.patch("countjar.notify._post_pinned", return_value=200) as post:
         c = counters.apply(ws, counter, "up").counter
         assert post.call_count == 0
         c = counters.apply(ws, c, "up").counter
         c = counters.apply(ws, c, "up").counter
         assert post.call_count == 1
-        kwargs = post.call_args.kwargs
-        assert kwargs["headers"]["X-CountJar-Signature"] == notify.sign(m["secret"], kwargs["data"])
-        assert kwargs["allow_redirects"] is False
+        ip, host, path, body, headers = post.call_args.args
+        assert (ip, host, path) == ("93.184.216.34", "hooks.example.com", "/x")
+        assert headers["X-CountJar-Signature"] == notify.sign(m["secret"], body)
 
 
 def test_milestone_concurrent_claim_fires_once(ws, counter):
     with mock.patch("socket.getaddrinfo", public_dns):
         notify.add_milestone(ws, counter, 1, "webhook", "https://hooks.example.com/x")
     with mock.patch("socket.getaddrinfo", public_dns), \
-            mock.patch("countjar.notify.requests.post") as post:
-        post.return_value.status_code = 200
+            mock.patch("countjar.notify._post_pinned", return_value=200) as post:
         c = db.col("counters").find_one({"_id": counter["_id"]})
         notify.check(ws, c, 0, 1)
         notify.check(ws, c, 0, 1)  # a second request that saw the same crossing
@@ -93,15 +93,15 @@ def test_milestone_failure_recorded_not_raised(ws, counter):
     with mock.patch("socket.getaddrinfo", public_dns):
         notify.add_milestone(ws, counter, 1, "webhook", "https://hooks.example.com/x")
     with mock.patch("socket.getaddrinfo", public_dns), \
-            mock.patch("countjar.notify.requests.post", side_effect=OSError("boom")):
+            mock.patch("countjar.notify._post_pinned", side_effect=OSError("boom")):
         counters.apply(ws, counter, "up")
     assert "boom" in db.col("milestones").find_one()["last_error"]
 
 
 def test_sms_target_must_be_member(ws, counter, owner):
     with pytest.raises(notify.MilestoneError):
-        notify.add_milestone(ws, counter, 5, "sms", "+19999999999")
-    m = notify.add_milestone(ws, counter, 5, "sms", owner["phone"])
+        notify.add_milestone(ws, counter, 5, "sms", "+19999999999", user=owner)
+    m = notify.add_milestone(ws, counter, 5, "sms", owner["phone"], user=owner)
     assert m["channel"] == "sms"
 
 
@@ -163,3 +163,75 @@ def test_workspace_limit(owner):
         accounts.create_workspace(owner, "w4")
     with pytest.raises(accounts.AccountError):
         accounts.create_workspace(make_user("+14155550111", "B"), "demo")
+
+
+@pytest.mark.parametrize("style", ["flat", "social", "big"])
+def test_badge_label_cannot_break_out_of_attributes(client, style):
+    resp = client.get(f'/badge/x/y.svg?style={style}&label=x"%20onload="alert(1)%27<b>')
+    body = resp.get_data(as_text=True)
+    assert 'onload="' not in body and "<b>" not in body
+    assert "&quot;" in body
+
+
+def test_badge_is_sandboxed(client):
+    resp = client.get("/badge/x/y.svg")
+    assert "sandbox" in resp.headers["Content-Security-Policy"]
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_html_pages_send_security_headers(client):
+    resp = client.get("/")
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert resp.headers["X-Frame-Options"] == "DENY"
+    assert resp.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+
+
+def test_sms_cannot_target_another_member(ws, counter, owner):
+    mate = make_user("+14155550177", "Mate")
+    accounts.add_member(ws, mate["phone"])
+    with pytest.raises(notify.MilestoneError):
+        notify.add_milestone(ws, counter, 5, "sms", owner["phone"], user=mate)
+
+
+def test_sms_alerts_are_capped_per_number(ws, counter, owner):
+    sent = []
+    with mock.patch.object(notify, "send_sms", lambda to, body: sent.append(to)):
+        for i in range(notify.SMS_PER_DAY + 2):
+            m = notify.add_milestone(ws, counter, counter["count"] + 1, "sms", owner["phone"], user=owner)
+            counter = counters.apply(ws, counter, "up").counter
+            db.col("milestones").delete_one({"_id": m["_id"]})
+    assert len(sent) == notify.SMS_PER_DAY
+
+
+def test_csv_cells_cannot_start_formulas():
+    out = stats.to_csv([{"referrer": "=HYPERLINK(\"x\")", "props": {"a": "b"}, "delta": -1}],
+                       ["referrer", "props", "delta"])
+    assert "'=HYPERLINK" in out and ",-1" in out
+
+
+def test_unique_visitors_ignores_blanks(ws, counter):
+    for v in ("a", "a", "b", None, ""):
+        counters.apply(ws, counter, "up", visitor=v)
+    assert stats.window(counter, stats.parse_window("1h"))["unique"] == 2
+
+
+def test_threshold_out_of_range_rejected(ws, counter):
+    with pytest.raises(notify.MilestoneError):
+        notify.add_milestone(ws, counter, 10 ** 30, "sms", "+1")
+
+
+def test_default_secret_key_refused_outside_dev():
+    from countjar import create_app
+    with pytest.raises(RuntimeError):
+        create_app({"MONGODB_URI": None, "VERIFY_DEV_MODE": False, "TESTING": False,
+                    "SECRET_KEY": "dev-insecure-key"})
+
+
+def test_verify_handles_non_json_error_page(app):
+    from countjar import verify
+    resp = mock.Mock(status_code=502, content=b"<html>Bad gateway</html>")
+    resp.json.side_effect = ValueError("not json")
+    with app.app_context(), mock.patch("countjar.verify.requests.post", return_value=resp):
+        app.config.update(TWILIO_ACCOUNT_SID="AC", TWILIO_AUTH_TOKEN="t", TWILIO_VERIFY_SID="VA")
+        with pytest.raises(verify.VerifyError):
+            verify._twilio("Verifications", {})

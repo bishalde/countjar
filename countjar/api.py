@@ -97,10 +97,10 @@ def load(ws_slug, name):
 
 def params():
     data = dict(request.args)
-    if request.is_json:
-        data.update({k: v for k, v in (request.get_json(silent=True) or {}).items()
-                     if isinstance(v, (str, int, float, bool))})
-    elif request.form:
+    body = request.get_json(silent=True) if request.is_json else None
+    if isinstance(body, dict):
+        data.update({k: v for k, v in body.items() if isinstance(v, (str, int, float, bool))})
+    elif body is None and request.form:
         data.update(request.form)
     return data
 
@@ -115,6 +115,15 @@ def window_block(counter, p):
     w = stats.window(counter, td)
     return {"window": {"range": p["window"], "count": w["net"], "events": w["events"],
                        "unique": w["unique"]}}
+
+
+def json_body():
+    body = request.get_json(silent=True)
+    if body is None:
+        return {}
+    if not isinstance(body, dict):
+        raise ApiError("invalid_body", "Send the settings as a JSON object.", 400)
+    return body
 
 
 def csv_response(body, filename):
@@ -240,7 +249,7 @@ def admin(ws_slug):
 @bp.post("/<ws_slug>/counters")
 def create(ws_slug):
     ws = admin(ws_slug)
-    body = request.get_json(silent=True) or {}
+    body = json_body()
     c = counters.create_counter(ws, body.get("name"), **{
         k: body[k] for k in ("type", "visibility", "description", "step", "min", "max", "unique",
                              "start") if k in body})
@@ -253,7 +262,7 @@ def update(ws_slug, name):
     _, counter = counters.find(ws_slug, name)
     if not counter:
         raise ApiError("not_found", f"Counter “{name}” not found.", 404)
-    body = request.get_json(silent=True) or {}
+    body = json_body()
     c = counters.update_counter(counter, {
         k: body[k] for k in ("visibility", "description", "step", "min", "max", "unique") if k in body})
     return jsonify(**counters.serialize(c, ws_slug))

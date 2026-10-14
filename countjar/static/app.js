@@ -17,10 +17,12 @@
   function odometer(el, value) {
     const text = Number(value || 0).toLocaleString("en-US");
     if (el.dataset.text === text) return;
-    const prev = el.dataset.text || "";
     el.dataset.text = text;
     el.setAttribute("aria-label", text);
-    if (prev.length !== text.length) {
+    // Rebuild when the shape changes (digit count, sign, separators), not just the length.
+    const layout = text.replace(/\d/g, "0");
+    if (el.dataset.layout !== layout) {
+      el.dataset.layout = layout;
       el.innerHTML = "";
       for (const ch of text) {
         if (/\d/.test(ch)) {
@@ -56,6 +58,13 @@
   window.cjOdometer = odometer;
 
   // ---------- helpers ----------
+  // Proxies and error pages can answer with HTML; don't let that surface as a JSON parse error.
+  async function readJson(r) {
+    const type = r.headers.get("content-type") || "";
+    if (!type.includes("json")) throw new Error(`The server answered unexpectedly (HTTP ${r.status}). Try again.`);
+    return r.json();
+  }
+
   const csrf = () => document.querySelector('meta[name="csrf-token"]')?.content || "";
 
   window.cjToast = function (message, kind) {
@@ -103,7 +112,7 @@
         this.request = `GET ${base}${path}`;
         try {
           const r = await fetch(path);
-          const data = await r.json();
+          const data = await readJson(r);
           this.response = JSON.stringify(
             r.ok ? { name: data.name, count: data.count, updated_at: data.updated_at } : data, null, 2);
           if (r.ok) {
@@ -111,7 +120,7 @@
             odometer(this.$refs.odo, this.count);
           }
         } catch (e) {
-          this.response = '{ "error": "network error" }';
+          this.response = JSON.stringify({ error: e.message || "network error" }, null, 2);
         } finally {
           this.busy = false;
         }
@@ -136,7 +145,7 @@
         if (action === "set") body.append("value", this.value);
         try {
           const r = await fetch(actionUrl, { method: "POST", body, headers: { Accept: "application/json" } });
-          const data = await r.json();
+          const data = await readJson(r);
           if (!r.ok) throw new Error(data.error || "Something went wrong");
           this.count = data.count;
           odometer(this.$refs.odo, this.count);
@@ -160,7 +169,7 @@
       async load() {
         const r = await fetch(`${url}?range=${this.range}`);
         if (!r.ok) return;
-        const { series } = await r.json();
+        const { series } = await readJson(r);
         this.total = series.reduce((a, p) => a + p.ups, 0);
         const hourly = this.range === "24h";
         const labels = series.map((p) => {

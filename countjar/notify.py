@@ -8,15 +8,18 @@ import secrets
 import socket
 from urllib.parse import urlparse
 
+import certifi
 import requests
+import urllib3
 from bson import ObjectId
 from flask import current_app
 
-from . import accounts, counters, db
+from . import counters, db, ratelimit
 
 log = logging.getLogger(__name__)
 
 CHANNELS = ("webhook", "sms")
+SMS_PER_DAY = 5  # per recipient, across all workspaces
 MAX_PER_COUNTER = 10
 
 
@@ -24,27 +27,40 @@ class MilestoneError(Exception):
     pass
 
 
-def validate_webhook_url(url):
-    """Allow only https URLs that resolve to public addresses (no SSRF into private nets)."""
-    parsed = urlparse((url or "").strip())
-    if parsed.scheme != "https" or not parsed.hostname:
-        raise MilestoneError("Webhook URL must start with https://")
+def _public_ip(host):
+    """Resolve once and refuse anything that isn't a public internet address."""
     try:
-        infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
+        infos = socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)
+    except (socket.gaierror, UnicodeError):
         raise MilestoneError("That webhook host doesn't resolve.") from None
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            raise MilestoneError("Webhook URL must point to a public internet address.")
+    ips = [info[4][0] for info in infos]
+    if not ips or not all(ipaddress.ip_address(ip).is_global for ip in ips):
+        raise MilestoneError("Webhook URL must point to a public internet address.")
+    return ips[0]
+
+
+def validate_webhook_url(url):
+    """Allow only https URLs on port 443 that resolve to public addresses (no SSRF)."""
+    parsed = urlparse((url or "").strip())
+    try:
+        host, port = parsed.hostname, parsed.port
+    except ValueError:
+        raise MilestoneError("That webhook URL isn't valid.") from None
+    if parsed.scheme != "https" or not host:
+        raise MilestoneError("Webhook URL must start with https://")
+    if port not in (None, 443):
+        raise MilestoneError("Webhook URLs must use the standard https port (443).")
+    _public_ip(host)
     return parsed.geturl()
 
 
-def add_milestone(ws, counter, threshold, channel, target):
+def add_milestone(ws, counter, threshold, channel, target, user=None):
     try:
         threshold = int(threshold)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise MilestoneError("Threshold must be a whole number.") from None
+    if abs(threshold) > counters.BOUND:
+        raise MilestoneError("That threshold is too large.")
     if channel not in CHANNELS:
         raise MilestoneError("Pick webhook or SMS.")
     if db.col("milestones").count_documents({"counter_id": counter["_id"]}) >= MAX_PER_COUNTER:
@@ -52,9 +68,9 @@ def add_milestone(ws, counter, threshold, channel, target):
     if channel == "webhook":
         target = validate_webhook_url(target)
     else:
-        phones = {m["user"]["phone"] for m in accounts.members(ws)}
-        if target not in phones:
-            raise MilestoneError("SMS alerts can only go to a verified member of this workspace.")
+        # Only to the signed-in person's own verified number, so alerts can't be aimed at anyone else.
+        if not user or target != user["phone"]:
+            raise MilestoneError("Text alerts can only go to your own phone number.")
     doc = {
         "counter_id": counter["_id"], "threshold": threshold, "channel": channel,
         "target": target, "secret": "whsec_" + secrets.token_urlsafe(18),
@@ -107,6 +123,8 @@ def _deliver(ws, counter, m, count):
         if m["channel"] == "webhook":
             send_webhook(ws, counter, m, count)
         else:
+            if not ratelimit.hit(f"sms:{m['target']}", SMS_PER_DAY, 86400).allowed:
+                raise MilestoneError(f"Skipped: this number already got {SMS_PER_DAY} alerts today.")
             send_sms(m["target"],
                      f"🫙 CountJar: {ws['slug']}/{counter['name']} just reached "
                      f"{m['threshold']:,} (now {count:,}).")
@@ -130,13 +148,29 @@ def send_webhook(ws, counter, m, count):
         "count": count,
         "fired_at": counters._iso(db.now()),
     }).encode()
-    resp = requests.post(url, data=body, timeout=3, allow_redirects=False, headers={
+    parsed = urlparse(url)
+    # Connect to the address we just checked, so a DNS answer that changes between the
+    # check and the request (DNS rebinding) can't send us to a private address.
+    status = _post_pinned(_public_ip(parsed.hostname), parsed.hostname,
+                          (parsed.path or "/") + (f"?{parsed.query}" if parsed.query else ""), body, {
         "Content-Type": "application/json",
         "User-Agent": "CountJar-Webhook/1.0",
         "X-CountJar-Signature": sign(m["secret"], body),
     })
-    if resp.status_code >= 400:
-        raise MilestoneError(f"Webhook returned HTTP {resp.status_code}")
+    if status >= 400:
+        raise MilestoneError(f"Webhook returned HTTP {status}")
+
+
+def _post_pinned(ip, host, path, body, headers):
+    pool = urllib3.HTTPSConnectionPool(
+        ip, 443, server_hostname=host, assert_hostname=host, cert_reqs="CERT_REQUIRED",
+        ca_certs=certifi.where(), timeout=urllib3.Timeout(connect=2, read=3), retries=False)
+    try:
+        resp = pool.request("POST", path, body=body, headers={**headers, "Host": host},
+                            redirect=False)
+    finally:
+        pool.close()
+    return resp.status
 
 
 def send_sms(to, body):

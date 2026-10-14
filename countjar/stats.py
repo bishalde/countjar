@@ -34,10 +34,19 @@ def window(counter, td):
         {"$match": q},
         {"$group": {"_id": None, "net": {"$sum": "$delta"}, "events": {"$sum": 1}}},
     ]))
-    uniques = len([v for v in db.col("events").distinct("visitor", q) if v])
+    uniques = unique_visitors(q)
     net = rows[0]["net"] if rows else 0
     events = rows[0]["events"] if rows else 0
     return {"net": net, "events": events, "unique": uniques}
+
+
+def unique_visitors(q):
+    rows = list(db.col("events").aggregate([
+        {"$match": {**q, "visitor": {"$nin": [None, ""]}}},
+        {"$group": {"_id": "$visitor"}},
+        {"$count": "n"},
+    ]))
+    return rows[0]["n"] if rows else 0
 
 
 def _floor(dt, unit):
@@ -94,7 +103,7 @@ def workspace_summary(ws, include_private=True):
     since = db.now() - timedelta(hours=24)
     q = {"counter_id": {"$in": ids}, "ts": {"$gte": since}}
     events_24h = db.col("events").count_documents(q)
-    uniques = len([v for v in db.col("events").distinct("visitor", q) if v])
+    uniques = unique_visitors(q)
     top = sorted(items, key=lambda c: c["count"], reverse=True)[:5]
     active = [c for c in items if c.get("updated_at") and
               c["updated_at"].replace(tzinfo=since.tzinfo) >= since]
@@ -138,10 +147,17 @@ def event_rows(events):
     } for e in events]
 
 
+def _cell(v):
+    # Spreadsheets run cells starting with these as formulas; referrers and props are visitor input.
+    if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + v
+    return v
+
+
 def to_csv(rows, fields):
     buf = io.StringIO()
     w = csv.DictWriter(buf, fieldnames=fields, extrasaction="ignore")
     w.writeheader()
     for r in rows:
-        w.writerow({k: json.dumps(v) if isinstance(v, dict) else v for k, v in r.items()})
+        w.writerow({k: _cell(json.dumps(v) if isinstance(v, dict) else v) for k, v in r.items()})
     return buf.getvalue()

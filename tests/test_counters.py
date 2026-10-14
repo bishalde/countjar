@@ -135,3 +135,35 @@ def test_delta_ignores_stale_counter_doc(ws, kind, action, kw):
         counters.apply(ws, stale, action, visitor=f"v{i}", **kw)
     deltas = [e["delta"] for e in db.col("events").find({"counter_id": stale["_id"]})]
     assert deltas == [1, 1, 1]
+
+
+def test_reset_lets_unique_visitors_count_again(ws):
+    c = counters.create_counter(ws, "uniq", unique="once")
+    assert counters.apply(ws, c, "up", visitor="v1").counted
+    counters.apply(ws, c, "reset")
+    assert counters.apply(ws, c, "up", visitor="v1").counted
+
+
+def test_clamp_never_stores_out_of_bounds_and_records_real_change(ws):
+    c = counters.create_counter(ws, "capped", max=10, start=8)
+    res = counters.apply(ws, c, "up", by=5)
+    assert res.counter["count"] == 10
+    assert db.col("counters").find_one({"_id": c["_id"]})["count"] == 10
+    ev = db.col("events").find_one({"counter_id": c["_id"]})
+    assert ev["delta"] == 2
+    assert db.col("counters").find_one({"_id": c["_id"]})["ups"] == 2
+    assert not counters.apply(ws, res.counter, "up").counted
+
+
+@pytest.mark.parametrize("bad", [float("inf"), "1e999", [1], {"a": 1}])
+def test_bad_numbers_are_400_not_crashes(ws, bad):
+    c = counters.create_counter(ws, "n")
+    with pytest.raises(CounterError):
+        counters.apply(ws, c, "set", value=bad)
+    with pytest.raises(CounterError):
+        counters.create_counter(ws, "m", step=bad)
+
+
+def test_non_string_name_is_rejected(ws):
+    with pytest.raises(CounterError):
+        counters.create_counter(ws, 5)

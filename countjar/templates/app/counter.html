@@ -280,10 +280,9 @@ console.log((await res.json()).count);</code></pre>
       <input id="m-url" name="target" type="url" class="field font-mono" placeholder="https://example.com/hooks/countjar" :disabled="channel !== 'webhook'" :required="channel === 'webhook'">
       <p class="hint">Must be https. We send a signed JSON POST once, the first time the count reaches the number.</p></div>
     <div x-cloak x-show="channel === 'sms'"><label class="label" for="m-phone">Send to</label>
-      <select id="m-phone" name="target" class="field" :disabled="channel !== 'sms'">
-        {% for p in member_phones %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
-      </select>
-      <p class="hint">Texts can only go to verified members of this workspace.</p></div>
+      <input type="hidden" name="target" value="{{ user.phone }}" :disabled="channel !== 'sms'">
+      <p id="m-phone" class="field font-mono text-muted">{{ user.phone }}</p>
+      <p class="hint">Texts go to the number you signed in with, at most 5 a day.</p></div>
     <button class="btn btn-primary w-full">Add alert</button>
   </form>
 </div>

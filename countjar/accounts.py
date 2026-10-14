@@ -65,6 +65,7 @@ def delete_user(user):
     for ws in db.col("workspaces").find({"owner_id": user["_id"]}):
         delete_workspace(ws)
     db.col("workspaces").update_many({}, {"$pull": {"members": {"user_id": user["_id"]}}})
+    db.col("tokens").update_many({"created_by": user["_id"]}, {"$set": {"revoked": True}})
     db.col("users").delete_one({"_id": user["_id"]})
 
 
@@ -92,6 +93,10 @@ def create_workspace(user, slug, name=None):
         doc["_id"] = db.col("workspaces").insert_one(doc).inserted_id
     except DuplicateKeyError:
         raise AccountError(f"The workspace “{slug}” is taken.") from None
+    # Two requests at once can both pass the check above; recount and back out.
+    if db.col("workspaces").count_documents({"owner_id": user["_id"]}) > current_app.config["WORKSPACE_LIMIT"]:
+        db.col("workspaces").delete_one({"_id": doc["_id"]})
+        raise AccountError(f"You can own up to {current_app.config['WORKSPACE_LIMIT']} workspaces.")
     return doc
 
 
@@ -153,6 +158,15 @@ def remove_member(ws, user_id):
     if user_id == ws["owner_id"]:
         raise AccountError("The owner can't be removed.")
     db.col("workspaces").update_one({"_id": ws["_id"]}, {"$pull": {"members": {"user_id": user_id}}})
+    # Tokens they made would otherwise outlive their access.
+    db.col("tokens").update_many({"workspace_id": ws["_id"], "created_by": user_id},
+                                 {"$set": {"revoked": True}})
+    # Stop texting someone who no longer has access to the workspace.
+    user = get_user(user_id)
+    if user:
+        ids = [c["_id"] for c in db.col("counters").find({"workspace_id": ws["_id"]}, {"_id": 1})]
+        db.col("milestones").delete_many({"counter_id": {"$in": ids}, "channel": "sms",
+                                          "target": user["phone"]})
 
 
 # ---------- budgets ----------

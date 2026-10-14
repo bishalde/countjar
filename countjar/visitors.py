@@ -7,10 +7,12 @@ from flask import current_app
 
 
 def client_ip(request):
-    # Vercel (and most proxies) put the real client first in X-Forwarded-For.
-    fwd = request.headers.get("X-Forwarded-For", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
+    # Vercel's edge overwrites X-Forwarded-For with the real client, so it's only trusted there.
+    # Anywhere else a client could send its own header and dodge per-IP limits.
+    if current_app.config.get("ON_VERCEL"):
+        fwd = request.headers.get("X-Forwarded-For", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
     return request.remote_addr or "0.0.0.0"
 
 

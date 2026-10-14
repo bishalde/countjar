@@ -1,10 +1,13 @@
 """Public marketing pages + SEO plumbing (robots.txt, sitemap.xml, keyword landing pages)."""
+import logging
 import re
 
 from flask import Blueprint, abort, current_app, make_response, redirect, render_template, request, url_for
 
 from . import config, counters, visitors
 from .accounts import current_user
+
+log = logging.getLogger(__name__)
 
 bp = Blueprint("site", __name__)
 
@@ -140,10 +143,13 @@ def count_visit():
     ua = request.headers.get("User-Agent", "")
     if not ua or BOT.search(ua):
         return
-    ws, counter = counters.find(config.DEMO_WORKSPACE, config.SITE_COUNTER)
-    if counter:
-        counters.apply(ws, counter, "up", visitor=visitors.visitor_hash(request),
-                       referrer=visitors.referrer_host(request))
+    try:
+        ws, counter = counters.find(config.DEMO_WORKSPACE, config.SITE_COUNTER)
+        if counter:
+            counters.apply(ws, counter, "up", visitor=visitors.visitor_hash(request),
+                           referrer=visitors.referrer_host(request))
+    except Exception:  # the visitor tally must never take a page down
+        log.exception("couldn't count site visit")
 
 
 def site_visitor_count():

@@ -214,3 +214,65 @@ def test_site_visitor_counter_is_not_reachable_through_api(client, path):
 def test_demo_summary_hides_site_visitor_counter(client):
     names = [c["name"] for c in client.get("/api/v2/demo").get_json()["counters"]]
     assert "site-visitors" not in names
+
+
+def test_only_owner_manages_tokens_and_removal_revokes(client, ctx):
+    from tests.conftest import make_user
+    from countjar import tokens
+    owner = make_user("+14155550199", "Owner")
+    ws = accounts.create_workspace(owner, "team", "Team")
+    login(client, workspace="mine")  # Grace, +14155550123
+    grace = db.col("users").find_one({"phone": "+14155550123"})
+    accounts.add_member(ws, grace["phone"])
+    assert post(client, "/app/team/tokens", {"name": "x", "scopes": "admin"}).status_code == 403
+    _, raw = tokens.create_token(ws, grace, "old", ["admin"])
+    accounts.remove_member(ws, grace["_id"])
+    assert tokens.authenticate(raw) is None
+
+
+def test_token_name_is_escaped_in_revoke_prompt(signed_in):
+    post(signed_in, "/app/mine/tokens", {"name": "');alert(1)//", "scopes": "read"})
+    html = signed_in.get("/app/mine/tokens").get_data(as_text=True)
+    import html as htmllib
+    handler = htmllib.unescape(re.search(r'onsubmit="([^"]*)"', html).group(1))
+    arg = re.fullmatch(r"return confirm\((.*)\)", handler).group(1)
+    assert json.loads(arg).startswith("Revoke ');alert(1)//?")  # one string literal, nothing after it
+
+
+def test_non_ascii_csrf_token_is_rejected_not_crash(signed_in):
+    resp = signed_in.post("/app/mine/counters", data={"csrf_token": "é", "name": "x"})
+    assert resp.status_code == 400
+
+
+def test_history_export_bad_range_is_400(signed_in):
+    post(signed_in, "/app/mine/counters", {"name": "dl"})
+    assert signed_in.get("/app/mine/c/dl/export.csv?kind=history&range=5y").status_code == 400
+
+
+def test_member_adds_are_rate_limited(signed_in, monkeypatch):
+    from countjar import web
+    monkeypatch.setattr(web, "MEMBER_ADDS_PER_HOUR", 2)
+    for _ in range(2):
+        post(signed_in, "/app/mine/members", {"phone": "+14155550999"})
+    resp = post(signed_in, "/app/mine/members", {"phone": "+14155550999"}, follow_redirects=True)
+    assert "a lot of people this hour" in resp.get_data(as_text=True)
+
+
+def test_removed_member_stops_getting_texts(signed_in):
+    from countjar import notify
+    from tests.conftest import make_user
+    ws = ws_doc()
+    mate = make_user("+14155550188", "Mate")
+    accounts.add_member(ws, mate["phone"])
+    c = counters.create_counter(ws, "watched")
+    notify.add_milestone(ws, c, 5, "sms", mate["phone"], user=mate)
+    accounts.remove_member(ws_doc(), mate["_id"])
+    assert db.col("milestones").count_documents({"target": mate["phone"]}) == 0
+
+
+def test_site_visit_counting_never_breaks_the_page(client, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("db down")
+    monkeypatch.setattr(counters, "apply", boom)
+    resp = client.get("/", headers={"User-Agent": "Mozilla/5.0 Firefox/130"})
+    assert resp.status_code == 200

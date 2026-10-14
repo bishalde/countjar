@@ -17,8 +17,9 @@ def create_app(test_config=None):
 
     if app.config["VERIFY_DEV_MODE"] and app.config["ON_VERCEL"]:
         raise RuntimeError("VERIFY_DEV_MODE must never be enabled on a deployment")
-    if app.config["ON_VERCEL"] and app.config["SECRET_KEY"] == "dev-insecure-key":
-        raise RuntimeError("Set SECRET_KEY on the deployment")
+    if app.config["SECRET_KEY"] == "dev-insecure-key" and not (
+            app.config.get("TESTING") or app.config["VERIFY_DEV_MODE"]):
+        raise RuntimeError("Set SECRET_KEY before running CountJar")
 
     app.config.update(
         SESSION_COOKIE_HTTPONLY=True,
@@ -35,6 +36,14 @@ def create_app(test_config=None):
         g.pop("user", None)  # app contexts can outlive a request; never reuse a cached user
         if request.endpoint != "static":
             db.init()
+
+    @app.after_request
+    def security_headers(resp):
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        if resp.mimetype == "text/html":
+            resp.headers.setdefault("X-Frame-Options", "DENY")  # widgets use Shadow DOM, not iframes
+        return resp
 
     from . import api, auth, csrf, embed, site, web
 

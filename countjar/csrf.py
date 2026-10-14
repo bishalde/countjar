@@ -19,5 +19,6 @@ def init_app(app):
         if request.method in ("GET", "HEAD", "OPTIONS") or request.path.startswith("/api/"):
             return
         sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
-        if not hmac.compare_digest(sent, session.get("csrf", "")) or not sent:
+        expected = session.get("csrf", "")
+        if not sent or not hmac.compare_digest(sent.encode(), expected.encode()):
             abort(400, description="Your session expired. Reload the page and try again.")

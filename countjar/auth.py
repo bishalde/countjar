@@ -20,6 +20,8 @@ COUNTRIES = [
 
 
 DIAL = {code: dial for code, dial, _ in COUNTRIES}
+# Codes only go to countries in the picker; this also blocks premium-rate SMS fraud elsewhere.
+ALLOWED_DIALS = tuple(sorted({dial for _, dial, _ in COUNTRIES}, key=len, reverse=True))
 
 
 def normalize_phone(country, number):
@@ -34,7 +36,7 @@ def mask(phone):
 
 
 def safe_next(target):
-    if target and target.startswith("/") and not target.startswith("//"):
+    if target and target.startswith("/") and not target.startswith("//") and "\\" not in target:
         return target
     return url_for("web.home")
 
@@ -47,6 +49,9 @@ def login():
         phone = normalize_phone(request.form.get("country"), request.form.get("phone"))
         if not config.PHONE.match(phone):
             flash("Enter a valid mobile number.", "error")
+            return render_template("auth/login.html", countries=COUNTRIES, form=request.form), 400
+        if not phone.startswith(ALLOWED_DIALS):
+            flash("CountJar can't send sign-in codes to that country yet.", "error")
             return render_template("auth/login.html", countries=COUNTRIES, form=request.form), 400
         ip = visitors.client_ip(request)
         if not (ratelimit.hit(f"otp:phone:{phone}", 5, 3600).allowed and

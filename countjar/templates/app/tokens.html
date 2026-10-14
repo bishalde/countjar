@@ -30,9 +30,11 @@
           <td class="px-5 py-4">{% for s in t.scopes %}<span class="chip mr-1 {{ 'bg-coral/12 text-coral' if s == 'admin' else 'bg-honey-soft text-honey-text' if s == 'write' else 'bg-sunken text-muted' }}">{{ s }}</span>{% endfor %}</td>
           <td class="hidden px-5 py-4 text-muted sm:table-cell">{{ t.last_used | timeago }}</td>
           <td class="px-5 py-4 text-right">
-            <form method="post" action="{{ url_for('web.token_revoke', ws_slug=ws.slug, token_id=t._id) }}" onsubmit="return confirm('Revoke {{ t.name }}? Apps using it stop working right away.')">
+            {% if role == "owner" %}
+            <form method="post" action="{{ url_for('web.token_revoke', ws_slug=ws.slug, token_id=t._id) }}" onsubmit="return confirm({{ ('Revoke ' ~ t.name ~ '? Apps using it stop working right away.') | tojson | forceescape }})">
               {{ csrf() }}<button class="btn btn-ghost btn-sm text-coral">Revoke</button>
             </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -47,6 +49,7 @@
     {% endif %}
   </section>
 
+  {% if role == "owner" %}
   <form method="post" class="panel h-fit space-y-4 p-5">
     {{ csrf() }}
     <h2 class="font-semibold">Create a token</h2>
@@ -63,5 +66,11 @@
     </fieldset>
     <button class="btn btn-primary w-full">Create token</button>
   </form>
+  {% else %}
+  <div class="panel h-fit p-5 text-sm text-muted">
+    <h2 class="font-semibold text-ink">Tokens are managed by the owner</h2>
+    <p class="mt-2">Ask the workspace owner to create or revoke tokens. This keeps API access in one person's hands, and tokens stop working when someone leaves.</p>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
