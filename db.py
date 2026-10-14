@@ -21,7 +21,9 @@ def connect():
         import psycopg
 
         return psycopg.connect(DATABASE_URL, autocommit=True)
-    conn = sqlite3.connect(os.environ.get("SQLITE_PATH", "countjar.db"))
+    # Vercel's filesystem is read-only except /tmp (which is wiped between instances).
+    default = "/tmp/countjar.db" if os.environ.get("VERCEL") else "countjar.db"
+    conn = sqlite3.connect(os.environ.get("SQLITE_PATH", default))
     conn.isolation_level = None  # autocommit
     return conn
 
