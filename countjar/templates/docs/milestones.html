@@ -1,0 +1,124 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note, tabbed, panel %}
+{% set toc = [("how", "How milestones work"), ("add", "Add a milestone"), ("webhook", "Webhook requests"), ("verify", "Verify the signature"), ("sms", "Text alerts"), ("failures", "When delivery fails"), ("test", "Test a milestone")] %}
+{% block content %}
+<h1>Milestone alerts</h1>
+<p class="lead">Get told when a counter reaches a number: a webhook to your server or a text to your phone. Celebrate the 1,000th sign-up, or know when the last seats are going.</p>
+
+<h2 id="how">How milestones work</h2>
+<ul>
+  <li>A milestone has a <strong>threshold</strong> and a <strong>channel</strong>: a webhook URL or your phone.</li>
+  <li>It fires when the counter goes from below the threshold to the threshold or above. That works for any change that raises the count, including <code>up</code>, <code>set</code>, likes, votes and ratings.</li>
+  <li>It fires <strong>once</strong>. Even if many requests arrive at the same moment, only one alert is sent.</li>
+  <li>A milestone that the counter has already passed when you add it won't fire until you re-arm it.</li>
+  <li>Each counter can have up to 10 milestones.</li>
+</ul>
+
+<h2 id="add">Add a milestone</h2>
+<p>Open the counter in the dashboard and go to the <strong>Milestones</strong> tab. Enter the number under <strong>When the count reaches</strong>, choose <strong>Webhook</strong> or <strong>Text message</strong>, and save. Each milestone shows whether it's waiting, has fired, or failed.</p>
+<p>To use a milestone again, choose <strong>Re-arm</strong>. It then fires the next time the counter climbs past the threshold. If the counter is already above it, that means it has to drop below first.</p>
+
+<h2 id="webhook">Webhook requests</h2>
+<p>When a webhook milestone fires, CountJar sends a <code>POST</code> request to your URL with this JSON body:</p>
+{% call code("json") %}{
+  "event": "milestone.reached",
+  "workspace": "acme",
+  "counter": "signups",
+  "threshold": 1000,
+  "count": 1000,
+  "fired_at": "2026-10-14T09:12:44Z"
+}{% endcall %}
+<p><code>count</code> is the value right after the change that crossed the threshold, so it can be higher than <code>threshold</code> if the counter jumped past it. The request has these headers:</p>
+<div class="doc-table"><table>
+  <thead><tr><th>Header</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td><code>Content-Type</code></td><td><code>application/json</code></td></tr>
+    <tr><td><code>User-Agent</code></td><td><code>CountJar-Webhook/1.0</code></td></tr>
+    <tr><td><code>X-CountJar-Signature</code></td><td><code>sha256=</code> followed by the HMAC-SHA256 of the raw body, as hex, using the milestone's signing secret.</td></tr>
+  </tbody>
+</table></div>
+<p>Webhook URLs must:</p>
+<ul>
+  <li>start with <code>https://</code> and use the standard port (443);</li>
+  <li>point to a public internet address, not a private network or <code>localhost</code>;</li>
+  <li>respond within 3 seconds with a status below 400.</li>
+</ul>
+<p>Redirects aren't followed, so use the final URL.</p>
+
+<h2 id="verify">Verify the signature</h2>
+<p>Anyone who finds your webhook URL could send it a request. Check the signature so you only act on requests from CountJar. Find the signing secret, which starts with <code>whsec_</code>, under <strong>Signing secret</strong> on the milestone, and store it as <code>COUNTJAR_WEBHOOK_SECRET</code> on your server.</p>
+<p>Compute the HMAC over the exact bytes you received, before parsing the JSON, and compare it in constant time:</p>
+{% call tabbed([("node", "Node.js"), ("python", "Python"), ("php", "PHP")], "node") %}
+{% call panel("node") %}{% call code("javascript") %}import crypto from "node:crypto";
+import express from "express";
+
+const app = express();
+const secret = process.env.COUNTJAR_WEBHOOK_SECRET;
+
+// express.raw keeps the body as bytes, exactly as CountJar signed it.
+app.post("/hooks/countjar", express.raw({ type: "application/json" }), (req, res) => {
+  const expected = "sha256=" + crypto.createHmac("sha256", secret).update(req.body).digest("hex");
+  const given = req.get("X-CountJar-Signature") || "";
+  const valid = given.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+  if (!valid) return res.sendStatus(401);
+
+  const event = JSON.parse(req.body);
+  console.log(`${event.workspace}/${event.counter} reached ${event.threshold}`);
+  res.sendStatus(204);
+});
+
+app.listen(3000);{% endcall %}{% endcall %}
+{% call panel("python") %}{% call code("python") %}import hashlib
+import hmac
+import os
+
+from flask import Flask, abort, request
+
+app = Flask(__name__)
+SECRET = os.environ["COUNTJAR_WEBHOOK_SECRET"].encode()
+
+
+@app.post("/hooks/countjar")
+def countjar_hook():
+    body = request.get_data()  # the raw bytes, before any JSON parsing
+    expected = "sha256=" + hmac.new(SECRET, body, hashlib.sha256).hexdigest()
+    given = request.headers.get("X-CountJar-Signature", "")
+    if not hmac.compare_digest(expected.encode(), given.encode()):
+        abort(401)
+
+    event = request.get_json()
+    print(f"{event['workspace']}/{event['counter']} reached {event['threshold']}")
+    return "", 204{% endcall %}{% endcall %}
+{% call panel("php") %}{% call code("php") %}<?php
+$body = file_get_contents("php://input");
+$expected = "sha256=" . hash_hmac("sha256", $body, getenv("COUNTJAR_WEBHOOK_SECRET"));
+$given = $_SERVER["HTTP_X_COUNTJAR_SIGNATURE"] ?? "";
+
+if (!hash_equals($expected, $given)) {
+    http_response_code(401);
+    exit;
+}
+
+$event = json_decode($body, true);
+error_log("{$event['workspace']}/{$event['counter']} reached {$event['threshold']}");
+http_response_code(204);{% endcall %}{% endcall %}
+{% endcall %}
+{% call note() %}To also turn away old requests that someone recorded and sent again, ignore deliveries whose <code>fired_at</code> is more than a few minutes old. It's covered by the signature, so it can't be changed without breaking it.{% endcall %}
+
+<h2 id="sms">Text alerts</h2>
+<p>Text alerts go to the phone number you signed in with. You can't send them to anyone else, including teammates; they can add their own.</p>
+{% call code() %}🫙 CountJar: acme/signups just reached 1,000 (now 1,000).{% endcall %}
+<p>Each phone number gets at most 5 milestone texts a day across all workspaces. Alerts over that limit are skipped and marked as failed, so you can re-arm them. If you leave a workspace, or are removed from it, your text alerts there are deleted.</p>
+
+<h2 id="failures">When delivery fails</h2>
+<p>CountJar tries each alert once and doesn't retry. If your server is down, too slow, or returns an error, or a text can't be sent, the milestone is marked <strong>Failed</strong> and the reason is shown when you hover over it. Choose <strong>Re-arm</strong> once you've fixed the problem.</p>
+<p>A failed alert never affects counting. The request that crossed the threshold still succeeds.</p>
+{% call note("warn") %}Since there are no retries, don't rely on a webhook as the only record of something important. Use the counter itself, or its <a href="/docs/api#events">events</a>, as the source of truth.{% endcall %}
+
+<h2 id="test">Test a milestone</h2>
+<p>Add a milestone one above the counter's current value, then count up once from a terminal:</p>
+{% call code("bash") %}curl -X POST {{ site_url }}/api/v2/acme/signups/up \
+  -H "Authorization: Bearer $COUNTJAR_TOKEN"{% endcall %}
+<p>The webhook or text should arrive within a few seconds, and the milestone will show as fired. To test a webhook before your server is ready, point it at a request inspector such as a temporary URL from a webhook testing service.</p>
+{% endblock %}
