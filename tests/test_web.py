@@ -270,6 +270,14 @@ def test_removed_member_stops_getting_texts(signed_in):
     assert db.col("milestones").count_documents({"target": mate["phone"]}) == 0
 
 
+def test_footer_credits_developer_and_links(client):
+    html = client.get("/").get_data(as_text=True)
+    assert "Made with" in html and ">Bishal</a>" in html
+    for href in ("https://github.com/bishalde/countjar", "https://www.linkedin.com/in/bishalde/",
+                 "https://bishalde.vercel.app/"):
+        assert f'href="{href}" target="_blank" rel="noopener noreferrer"' in html
+
+
 def test_site_visit_counting_never_breaks_the_page(client, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("db down")
