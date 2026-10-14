@@ -75,7 +75,7 @@ def post(client, url, data=None, **kw):
 
 
 def login(client, phone="+14155550123", name="Grace", workspace="grace"):
-    post(client, "/login", {"dial": "+1", "phone": phone})
+    post(client, "/login", {"country": "US", "phone": phone})
     code = verify._dev_codes[phone]
     resp = post(client, "/login/verify", {"code": code})
     if "/onboarding" in resp.headers.get("Location", ""):

@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}CountJar · Free counter API, hit counter and embeddable widgets{% endblock %}
+{% block description %}Count page views, clicks, downloads, likes, votes and ratings with one URL. A free REST counter API with private counters, API tokens, SVG badges, widgets and analytics.{% endblock %}
+{% block jsonld %}
+<script type="application/ld+json">
+{{ {
+  "@context": "https://schema.org",
+  "@graph": [
+    {"@type": "Organization", "@id": site_url ~ "/#org", "name": "CountJar", "url": site_url ~ "/",
+     "logo": site_url ~ url_for('static', filename='favicon.svg')},
+    {"@type": "WebSite", "@id": site_url ~ "/#site", "url": site_url ~ "/", "name": "CountJar",
+     "publisher": {"@id": site_url ~ "/#org"}},
+    {"@type": "SoftwareApplication", "name": "CountJar", "applicationCategory": "DeveloperApplication",
+     "operatingSystem": "Web", "url": site_url ~ "/",
+     "description": "Hosted counter API with embeddable view counters, like buttons, polls, star ratings and SVG badges.",
+     "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}},
+    {"@type": "WebAPI", "name": "CountJar Counter API", "documentation": site_url ~ "/docs/api",
+     "provider": {"@id": site_url ~ "/#org"}},
+    {"@type": "FAQPage", "mainEntity": [
+      {"@type": "Question", "name": "Is CountJar free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Every account gets 5 counters and 10,000 counts per day at no cost."}},
+      {"@type": "Question", "name": "How do I sign up?", "acceptedAnswer": {"@type": "Answer", "text": "Enter your mobile number and type in the 6-digit code we text you. There is no password to remember."}},
+      {"@type": "Question", "name": "Can I use CountJar from the browser?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The API allows cross-origin requests, so you can call public counters with fetch() from any website."}},
+      {"@type": "Question", "name": "Do you store visitor IP addresses?", "acceptedAnswer": {"@type": "Answer", "text": "No. Visitors are identified by a keyed hash so unique counts work without keeping IP addresses."}}
+    ]}
+  ]
+} | tojson }}
+</script>
+{% endblock %}
+{% block head %}<script src="{{ url_for('embed.embed_js') }}" async></script>{% endblock %}
+
+{% block body %}
+{% include "partials/site_header.html" %}
+<main id="main">
+
+  <!-- Hero: the demo jar is a real counter -->
+  <section class="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-10 sm:px-6 lg:grid-cols-[1.05fr_1fr] lg:pt-16">
+    <div>
+      <h1 class="text-[clamp(2.6rem,6vw,4.6rem)] font-extrabold leading-[0.98] tracking-[-0.035em]">
+        Count anything.<br>Every number gets its own URL.
+      </h1>
+      <p class="mt-6 max-w-[34rem] text-lg leading-relaxed text-muted">
+        CountJar is a hosted counter API with drop-in widgets. Hit a URL and get a number back.
+        Use it for page views, downloads, sign-ups, likes, votes or anything else you want to tally.
+      </p>
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a href="{{ url_for('auth.login') }}" class="btn btn-primary px-5 py-3 text-base">Create a free account</a>
+        <a href="/docs" class="btn btn-outline px-5 py-3 text-base">Read the docs</a>
+      </div>
+      <p class="mt-5 text-sm text-muted">Free for 5 counters. Sign in with a code sent to your phone.</p>
+    </div>
+
+    <div id="playground" x-data="demoJar({{ (demo.count if demo else 0) | tojson | forceescape }}, {{ site_url | tojson | forceescape }})" class="mx-auto w-full max-w-md">
+      <div class="relative">
+        <!-- the jar -->
+        <svg viewBox="0 0 400 420" class="w-full text-ink" aria-hidden="true">
+          <rect x="124" y="40" width="152" height="40" rx="8" fill="var(--surface)" stroke="currentColor" stroke-width="5"/>
+          <path d="M92 70h216a22 22 0 0 1 22 22v250a70 70 0 0 1-70 70H140a70 70 0 0 1-70-70V92a22 22 0 0 1 22-22Z"
+                fill="var(--surface)" stroke="currentColor" stroke-width="5"/>
+          <rect x="110" y="6" width="180" height="46" rx="12" fill="var(--honey)"/>
+          <rect x="110" y="38" width="180" height="14" fill="var(--honey-text)" opacity=".35"/>
+          <path d="M100 110v190" stroke="currentColor" stroke-opacity=".12" stroke-width="10" stroke-linecap="round"/>
+          <g stroke="currentColor" stroke-opacity=".14" stroke-width="5" stroke-linecap="round">
+            <path d="M150 300v60M175 300v60M200 300v60M225 300v60M140 350l100-40"/>
+            <path d="M265 300v60M290 300v60"/>
+          </g>
+        </svg>
+        <div class="absolute inset-x-[18%] top-[30%] text-center">
+          <div class="text-sm font-medium text-muted">demo / test-counter</div>
+          <div x-ref="odo" class="odo mt-2 text-[clamp(2.6rem,9vw,4.2rem)] font-semibold text-ink" role="status" aria-live="polite"></div>
+          <div class="mt-6 flex justify-center gap-3">
+            <button type="button" class="btn btn-outline size-12 rounded-full p-0" @click="call('down')" :disabled="busy" aria-label="Subtract one">{{ icon("minus", "size-5") }}</button>
+            <button type="button" class="btn btn-primary size-12 rounded-full p-0" @click="call('up')" :disabled="busy" aria-label="Add one">{{ icon("plus", "size-5") }}</button>
+          </div>
+        </div>
+      </div>
+      <div class="code-block mt-4">
+        <div class="text-honey" x-text="request"></div>
+        <pre class="mt-2 text-code-ink/80" x-text="response"></pre>
+      </div>
+      <p class="mt-3 text-center text-xs text-muted">This is a real public counter. Everyone visiting this page shares it.</p>
+    </div>
+  </section>
+
+  <!-- Widgets, live -->
+  <section class="border-y border-line bg-surface">
+    <div class="mx-auto max-w-6xl px-4 py-20 sm:px-6">
+      <div class="max-w-2xl">
+        <h2 class="text-4xl font-bold">Drop a counter into any page</h2>
+        <p class="mt-4 text-lg text-muted">One script tag and a div. Widgets render in their own Shadow DOM, so your site's CSS can't break them and theirs can't break yours.</p>
+      </div>
+      <div class="mt-12 grid gap-px overflow-hidden rounded-2xl border border-line bg-line md:grid-cols-2">
+        {% set widgets = [
+          ("View counter", "Counts each page load, or each visitor once a day.", 'data-workspace="demo" data-counter="test-counter" data-readonly data-label="views"'),
+          ("Like button", "One like per visitor. The heart pops when clicked.", 'data-workspace="demo" data-counter="likes" data-type="like"'),
+          ("Yes/no poll", "Ask a question and show live results after voting.", 'data-workspace="demo" data-counter="helpful" data-type="poll" data-question="Was this page helpful?"'),
+          ("Star rating", "1 to 5 stars with the live average and vote count.", 'data-workspace="demo" data-counter="rating" data-type="rating"'),
+        ] %}
+        {% for title, text, attrs in widgets %}
+        <div class="flex flex-col gap-5 bg-bg p-6 sm:p-8">
+          <div>
+            <h3 class="text-lg font-semibold">{{ title }}</h3>
+            <p class="mt-1 text-sm text-muted">{{ text }}</p>
+          </div>
+          <div class="flex min-h-16 items-center"><div class="countjar" {{ attrs | safe }}></div></div>
+          <pre class="code-block text-xs"><code>&lt;div class="countjar" {{ attrs }}&gt;&lt;/div&gt;</code></pre>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="mt-6 text-sm text-muted">Then load the script once per page: <code class="rounded bg-sunken px-1.5 py-0.5 text-ink">&lt;script src="{{ site_url }}/embed.js" async&gt;&lt;/script&gt;</code></p>
+    </div>
+  </section>
+
+  <!-- API -->
+  <section class="mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
+    <div>
+      <h2 class="text-4xl font-bold">An API you can learn in a minute</h2>
+      <p class="mt-4 text-lg text-muted">Every counter lives at <code class="text-ink">/api/v2/&lt;workspace&gt;/&lt;counter&gt;</code>. Add an action to change it.</p>
+      <dl class="mt-8 divide-y divide-line border-y border-line text-sm">
+        {% for path, what in [("/up", "Add one, or ?by=n with a token"), ("/down", "Subtract one"), ("/set?value=n", "Set an exact value"), ("/reset", "Back to zero"), ("/stats", "Totals, today, last 24 hours and 7 days"), ("/history?range=7d", "Hourly or daily series, JSON or CSV"), ("?window=24h", "Count within a time window")] %}
+        <div class="flex items-baseline justify-between gap-4 py-3">
+          <dt><code class="font-semibold text-ink">{{ path }}</code></dt>
+          <dd class="text-right text-muted">{{ what }}</dd>
+        </div>
+        {% endfor %}
+      </dl>
+    </div>
+    <div x-data="{ tab: 'curl' }">
+      <div class="flex gap-1 rounded-xl bg-sunken p-1 text-sm font-medium" role="tablist">
+        {% for t, label in [("curl", "curl"), ("js", "JavaScript"), ("py", "Python"), ("md", "README badge")] %}
+        <button type="button" role="tab" class="flex-1 rounded-lg px-3 py-2" :aria-selected="tab === '{{ t }}'"
+                :class="tab === '{{ t }}' ? 'bg-surface text-ink shadow-sm' : 'text-muted hover:text-ink'" @click="tab = '{{ t }}'">{{ label }}</button>
+        {% endfor %}
+      </div>
+<pre x-show="tab === 'curl'" class="code-block mt-3"><code><span class="text-code-ink/50"># public counter: no token needed</span>
+curl {{ site_url }}/api/v2/acme/visits/up
+
+<span class="text-code-ink/50"># private counter: send a workspace token</span>
+curl -H "Authorization: Bearer cj_..." \
+     "{{ site_url }}/api/v2/acme/signups/up?by=5&amp;plan=pro"
+
+<span class="text-honey">{"name":"signups","count":1285,"counted":true,...}</span></code></pre>
+<pre x-cloak x-show="tab === 'js'" class="code-block mt-3"><code>const res = await fetch(
+  "{{ site_url }}/api/v2/acme/visits/up"
+);
+const { count } = await res.json();
+document.querySelector("#views").textContent = count;</code></pre>
+<pre x-cloak x-show="tab === 'py'" class="code-block mt-3"><code>import requests
+
+r = requests.post(
+    "{{ site_url }}/api/v2/acme/builds/up",
+    headers={"Authorization": "Bearer cj_..."},
+)
+print(r.json()["count"])</code></pre>
+<pre x-cloak x-show="tab === 'md'" class="code-block mt-3"><code>![profile views]({{ site_url }}/badge/acme/profile.svg?style=flat&amp;color=amber)</code></pre>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <img src="{{ url_for('embed.badge', ws_slug='demo', name='test-counter', readonly=1, label='flat') }}" alt="flat badge style" height="20">
+        <img src="{{ url_for('embed.badge', ws_slug='demo', name='test-counter', readonly=1, style='social', label='social') }}" alt="social badge style" height="20">
+        <img src="{{ url_for('embed.badge', ws_slug='demo', name='test-counter', readonly=1, style='big', label='big', color='violet') }}" alt="big badge style" height="36">
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature ledger -->
+  <section class="mx-auto max-w-6xl px-4 sm:px-6">
+    <h2 class="text-4xl font-bold">What comes in the jar</h2>
+    <div class="mt-10 grid gap-x-16 md:grid-cols-2">
+      {% for ic, title, text in [
+        ("lock", "Private counters and scoped tokens", "Keep a counter private and give each app a token that can only read, only write, or also manage counters. Tokens are shown once and stored hashed."),
+        ("users", "Unique visitors", "Count every hit, each visitor once a day, or each visitor once ever. Visitors are a keyed hash, never a stored IP address."),
+        ("bell", "Milestone alerts", "Get a signed webhook or a text message when a counter passes 1,000, 10,000 or any number you choose."),
+        ("chart", "History and exports", "Hourly and daily charts for 24 hours, 7 days and 30 days. Download events or history as CSV or JSON."),
+        ("hash", "Steps, bounds and starting values", "Increment by 5, never drop below 0, cap at 100 seats, or start at 42,000 to carry over an old total."),
+        ("image", "Badges and a tracking pixel", "SVG badges for READMEs and Notion, plus a 1×1 pixel for emails and conversion pages. Extra query parameters are stored with each event."),
+        ("zap", "Fast and predictable limits", "600 requests a minute per path, with X-RateLimit headers and Retry-After when you go over."),
+        ("grid", "Workspaces and teammates", "Group counters into workspaces and invite teammates by phone number."),
+      ] %}
+      <div class="flex gap-4 border-t border-line py-6">
+        <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg bg-honey-soft text-honey-text">{{ icon(ic, "size-4.5") }}</span>
+        <div>
+          <h3 class="font-semibold">{{ title }}</h3>
+          <p class="mt-1 text-sm leading-relaxed text-muted">{{ text }}</p>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- Free plan -->
+  <section class="mx-auto mt-24 max-w-6xl px-4 sm:px-6">
+    <div class="relative overflow-hidden rounded-3xl bg-ink px-6 py-12 text-bg sm:px-12">
+      <div class="grid items-center gap-10 md:grid-cols-[1.2fr_1fr]">
+        <div>
+          <h2 class="text-4xl font-bold">Free, with room to grow</h2>
+          <p class="mt-3 max-w-md text-bg/70">Sign in with your phone number and start counting in under a minute. No card, no trial clock.</p>
+          <a href="{{ url_for('auth.login') }}" class="btn btn-primary mt-8 px-5 py-3 text-base">Create a free account</a>
+        </div>
+        <ul class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-bg/15">
+          {% for n, what in [("5", "counters"), ("10,000", "counts a day"), ("3", "workspaces"), ("600", "requests a minute")] %}
+          <li class="bg-ink p-5"><div class="font-mono text-3xl font-semibold text-honey">{{ n }}</div><div class="mt-1 text-sm text-bg/70">{{ what }}</div></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="mx-auto mt-24 max-w-3xl px-4 sm:px-6">
+    <h2 class="text-4xl font-bold">Questions</h2>
+    <div class="mt-8 divide-y divide-line border-y border-line">
+      {% for q, a in [
+        ("Is CountJar free?", "Yes. Every account gets 5 counters and 10,000 counts per day at no cost."),
+        ("How do I sign up?", "Enter your mobile number and type in the 6-digit code we text you. There is no password to remember."),
+        ("Can I call the API from the browser?", "Yes. The API sends Access-Control-Allow-Origin: *, so fetch() works from any website for public counters."),
+        ("Do you store visitor IP addresses?", "No. Visitors are identified by a keyed hash so unique counts work without keeping IP addresses."),
+        ("What happens when I hit a limit?", "The API answers 429 with a clear error code and a Retry-After header. Daily limits reset at midnight UTC."),
+      ] %}
+      <details class="group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold">
+          {{ q }}<span class="text-muted transition group-open:rotate-180">{{ icon("chevron") }}</span>
+        </summary>
+        <p class="mt-3 text-muted">{{ a }}</p>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+</main>
+{% include "partials/site_footer.html" %}
+{% endblock %}

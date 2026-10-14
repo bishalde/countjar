@@ -7,6 +7,7 @@ PHONE = re.compile(r"^\+[1-9]\d{7,14}$")
 
 DEMO_WORKSPACE = "demo"
 DEMO_COUNTER = "test-counter"
+SITE_COUNTER = "site-visitors"  # private, in the demo workspace: CountJar counting its own visitors
 
 
 def _int(name, default):

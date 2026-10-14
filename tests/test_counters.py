@@ -125,3 +125,13 @@ def test_clean_props_filters():
     p = counters.clean_props({"ref": "a", "token": "secret", "bad key": "x", "by": "3"},
                              {"token", "by"})
     assert p == {"ref": "a"}
+
+
+@pytest.mark.parametrize("kind,action,kw", [("like", "like", {}), ("poll", "vote", {"choice": "yes"}),
+                                            ("rating", "rate", {"value": 4})])
+def test_delta_ignores_stale_counter_doc(ws, kind, action, kw):
+    stale = counters.create_counter(ws, f"s-{kind}", type=kind)
+    for i in range(3):
+        counters.apply(ws, stale, action, visitor=f"v{i}", **kw)
+    deltas = [e["delta"] for e in db.col("events").find({"counter_id": stale["_id"]})]
+    assert deltas == [1, 1, 1]

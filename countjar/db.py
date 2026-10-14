@@ -73,12 +73,19 @@ def seed_demo():
     except DuplicateKeyError:
         pass
     ws = col("workspaces").find_one({"slug": config.DEMO_WORKSPACE})
-    try:
-        col("counters").insert_one(new_counter_doc(ws["_id"], config.DEMO_COUNTER, {
-            "description": "Public demo counter. Anyone can hit it.",
-        }))
-    except DuplicateKeyError:
-        pass
+    demos = [
+        (config.DEMO_COUNTER, {"description": "Public demo counter. Anyone can hit it."}),
+        ("likes", {"type": "like", "description": "Demo like button."}),
+        ("helpful", {"type": "poll", "description": "Demo yes/no poll."}),
+        ("rating", {"type": "rating", "description": "Demo star rating."}),
+        (config.SITE_COUNTER, {"visibility": "private", "unique": "daily",
+                               "description": "People visiting the CountJar site, once per visitor per day."}),
+    ]
+    for name, settings in demos:
+        try:
+            col("counters").insert_one(new_counter_doc(ws["_id"], name, settings))
+        except DuplicateKeyError:
+            pass
 
 
 def new_counter_doc(workspace_id, name, settings):

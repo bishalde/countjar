@@ -1,7 +1,9 @@
 """Public marketing pages + SEO plumbing (robots.txt, sitemap.xml, keyword landing pages)."""
+import re
+
 from flask import Blueprint, abort, current_app, make_response, redirect, render_template, request, url_for
 
-from . import config, counters
+from . import config, counters, visitors
 from .accounts import current_user
 
 bp = Blueprint("site", __name__)
@@ -125,6 +127,30 @@ def site_url():
     return (current_app.config.get("SITE_URL") or request.url_root).rstrip("/")
 
 
+# ---------- CountJar counting its own visitors ----------
+
+COUNTED_PAGES = {"site.landing", "site.solution", "site.pricing"}
+BOT = re.compile(r"bot|crawl|spider|slurp|preview|monitor|curl|wget|python-requests|headless", re.I)
+
+
+@bp.before_app_request
+def count_visit():
+    if request.method != "GET" or request.endpoint not in COUNTED_PAGES:
+        return
+    ua = request.headers.get("User-Agent", "")
+    if not ua or BOT.search(ua):
+        return
+    ws, counter = counters.find(config.DEMO_WORKSPACE, config.SITE_COUNTER)
+    if counter:
+        counters.apply(ws, counter, "up", visitor=visitors.visitor_hash(request),
+                       referrer=visitors.referrer_host(request))
+
+
+def site_visitor_count():
+    _, counter = counters.find(config.DEMO_WORKSPACE, config.SITE_COUNTER)
+    return counter["count"] if counter else 0
+
+
 @bp.app_context_processor
 def seo_context():
     return {
@@ -132,6 +158,7 @@ def seo_context():
         "google_verification": current_app.config.get("GOOGLE_SITE_VERIFICATION"),
         "bing_verification": current_app.config.get("BING_SITE_VERIFICATION"),
         "solutions_nav": [(k, v["h1"]) for k, v in SOLUTIONS.items()],
+        "site_visitor_count": site_visitor_count,  # called lazily, only by templates that show it
     }
 
 
@@ -146,7 +173,20 @@ def solution(slug):
     s = SOLUTIONS.get(slug)
     if not s:
         abort(404, description="Page not found.")
+    url = site_url() + request.path
+    graph = [
+        {"@type": "WebPage", "name": s["title"], "description": s["description"], "url": url},
+        {"@type": "BreadcrumbList", "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "CountJar", "item": site_url() + "/"},
+            {"@type": "ListItem", "position": 2, "name": s["h1"], "item": url},
+        ]},
+    ]
+    if s["faq"]:
+        graph.append({"@type": "FAQPage", "mainEntity": [
+            {"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}}
+            for q, a in s["faq"]]})
     return render_template("solution.html", s=s, slug=slug,
+                           jsonld={"@context": "https://schema.org", "@graph": graph},
                            others=[(k, v["h1"]) for k, v in SOLUTIONS.items() if k != slug])
 
 

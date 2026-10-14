@@ -172,7 +172,7 @@ def mutate(action):
         if action in counters.PUBLIC_ACTIONS and public:
             if p.get("by") is not None:
                 need(tok, "write", "Custom step sizes")
-        elif action == "down" and counters.is_demo(ws):
+        elif action == "down" and public and counters.is_demo(ws) and counter["name"] == config.DEMO_COUNTER:
             pass  # the demo counter is a free-for-all
         else:
             need(tok, "write", f"“{action}”")

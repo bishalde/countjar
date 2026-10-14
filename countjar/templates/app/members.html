@@ -1,0 +1,36 @@
+{% extends "app/_layout.html" %}
+{% from "partials/icons.html" import icon %}
+{% from "app/_macros.html" import csrf %}
+{% set active = "members" %}
+{% block title %}Members · {{ ws.name }} · CountJar{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Members</h1>
+<p class="mt-1 text-muted">Members can manage counters, tokens and alerts. Only the owner can add or remove people and delete the workspace.</p>
+<div class="mt-6 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+  <ul class="panel divide-y divide-line">
+    {% for m in items %}
+    <li class="flex items-center gap-3 px-5 py-4">
+      <span class="flex size-9 items-center justify-center rounded-full bg-ink text-sm font-semibold text-bg">{{ (m.user.name or "?")[:1] | upper }}</span>
+      <div class="min-w-0 flex-1"><div class="font-semibold">{{ m.user.name or "Unnamed" }}{% if m.user._id == user._id %} <span class="text-muted">(you)</span>{% endif %}</div>
+        <div class="font-mono text-xs text-muted">{{ m.user.phone }}</div></div>
+      <span class="chip {{ 'bg-honey-soft text-honey-text' if m.role == 'owner' else 'bg-sunken text-muted' }}">{{ m.role }}</span>
+      {% if m.role != "owner" and (role == "owner" or m.user._id == user._id) %}
+      <form method="post" action="{{ url_for('web.member_remove', ws_slug=ws.slug, user_id=m.user._id) }}" onsubmit="return confirm('Remove this member?')">
+        {{ csrf() }}<button class="btn btn-ghost btn-sm text-coral">{{ "Leave" if m.user._id == user._id else "Remove" }}</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% if role == "owner" %}
+  <form method="post" class="panel h-fit space-y-4 p-5">
+    {{ csrf() }}
+    <h2 class="font-semibold">Add a member</h2>
+    <div><label class="label" for="m-phone">Their phone number</label>
+      <input id="m-phone" name="phone" type="tel" class="field font-mono" placeholder="+14155550123" required>
+      <p class="hint">They need a CountJar account already. Include the country code.</p></div>
+    <button class="btn btn-primary w-full">Add member</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

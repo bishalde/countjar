@@ -1,7 +1,9 @@
 """CountJar: hosted counters with accounts, widgets and analytics."""
+import hashlib
+import os
 from datetime import datetime, timezone
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, g, jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
 from . import config, db
@@ -30,6 +32,7 @@ def create_app(test_config=None):
 
     @app.before_request
     def ensure_db():
+        g.pop("user", None)  # app contexts can outlive a request; never reuse a cached user
         if request.endpoint != "static":
             db.init()
 
@@ -44,6 +47,12 @@ def create_app(test_config=None):
 
     register_filters(app)
     register_errors(app)
+
+    @app.context_processor
+    def globals_():
+        from .accounts import current_user
+        return {"current_user_obj": current_user(), "now_year": datetime.now(timezone.utc).year}
+
     return app
 
 
@@ -78,7 +87,19 @@ def timeago(dt):
     return "just now"
 
 
+def asset_version(app):
+    h = hashlib.sha1()
+    for name in ("app.css", "app.js", "embed.js"):
+        path = os.path.join(app.static_folder, name)
+        if os.path.exists(path):
+            with open(path, "rb") as f:
+                h.update(f.read())
+    return h.hexdigest()[:10]
+
+
 def register_filters(app):
+    version = asset_version(app)
+    app.jinja_env.globals["asset_version"] = version
     app.jinja_env.filters["abbreviate"] = abbreviate
     app.jinja_env.filters["timeago"] = timeago
     app.jinja_env.filters["intcomma"] = lambda n: f"{n or 0:,}"

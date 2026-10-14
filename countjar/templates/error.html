@@ -1,5 +1,12 @@
 {% extends "base.html" %}
-{% block content %}
-<h1>{{ error.code }}</h1>
-<p class="muted">{{ error.description }}</p>
+{% block title %}{{ error.code }} · CountJar{% endblock %}
+{% block robots %}noindex{% endblock %}
+{% block body %}
+{% include "partials/site_header.html" %}
+<main id="main" class="mx-auto flex max-w-xl flex-col items-start px-4 py-24 sm:px-6">
+  <div class="odo font-mono text-7xl font-semibold text-honey-text">{{ error.code }}</div>
+  <h1 class="mt-6 text-3xl font-bold">{{ {404: "Nothing in this jar", 403: "You can't open this jar", 400: "That request didn't work", 429: "Slow down a little"}.get(error.code, "Something went wrong") }}</h1>
+  <p class="mt-3 text-muted">{{ error.description }}</p>
+  <a href="{{ url_for('site.landing') }}" class="btn btn-ink mt-8">Go to the home page</a>
+</main>
 {% endblock %}

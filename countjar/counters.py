@@ -282,6 +282,8 @@ def apply(ws, counter, action, *, by=None, value=None, choice=None,
             return_document=ReturnDocument.AFTER)
         record_value = stars
 
+    if action in ("like", "vote", "rate"):
+        old = doc["count"] - 1  # each of these is a single atomic +1
     new = doc["count"]
     _record(ws, doc, action, new - old, record_value, visitor, referrer, props or {}, ts)
     if new > old:

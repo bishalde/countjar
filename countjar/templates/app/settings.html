@@ -1,0 +1,27 @@
+{% extends "app/_layout.html" %}
+{% from "app/_macros.html" import copy_field, csrf %}
+{% set active = "settings" %}
+{% block title %}Settings · {{ ws.name }} · CountJar{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Workspace settings</h1>
+<div class="mt-6 grid max-w-3xl gap-6">
+  <form method="post" class="panel space-y-4 p-6">
+    {{ csrf() }}
+    <div><label class="label" for="w-name">Display name</label>
+      <input id="w-name" name="name" class="field" value="{{ ws.name }}" maxlength="60" {% if role != "owner" %}disabled{% endif %}></div>
+    <div><span class="label">API base URL</span>{{ copy_field(site_url ~ "/api/v2/" ~ ws.slug, "Base URL") }}
+      <p class="hint">The slug <span class="font-mono">{{ ws.slug }}</span> is permanent because it's part of every counter URL.</p></div>
+    {% if role == "owner" %}<button class="btn btn-primary">Save</button>{% endif %}
+  </form>
+  {% if role == "owner" %}
+  <form method="post" action="{{ url_for('web.workspace_delete', ws_slug=ws.slug) }}" class="rounded-2xl border border-coral/40 p-6" x-data="{ typed: '' }">
+    {{ csrf() }}
+    <h2 class="font-semibold text-coral">Delete workspace</h2>
+    <p class="mt-2 text-sm text-muted">Deletes every counter, token, alert and event in <span class="font-mono">{{ ws.slug }}</span>. This can't be undone.</p>
+    <label class="label mt-4" for="ws-confirm">Type <code class="font-mono">{{ ws.slug }}</code> to confirm</label>
+    <input id="ws-confirm" name="confirm" class="field font-mono" x-model="typed" autocomplete="off">
+    <button class="btn btn-danger mt-4" :disabled="typed !== {{ ws.slug | tojson | forceescape }}">Delete workspace</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

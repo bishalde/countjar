@@ -1,0 +1,40 @@
+{% from "partials/icons.html" import logo %}
+<footer class="mt-24 border-t border-line">
+  <div class="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+    <div>
+      <a href="{{ url_for('site.landing') }}" class="flex items-center gap-2 font-bold text-ink">{{ logo("size-7") }} CountJar</a>
+      <p class="mt-3 max-w-xs text-sm text-muted">Hosted counters for websites, apps and scripts. One URL per number.</p>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold">Use cases</h2>
+      <ul class="mt-3 space-y-2 text-sm text-muted">
+        {% for slug, h1 in solutions_nav %}<li><a class="hover:text-ink" href="{{ url_for('site.solution', slug=slug) }}">{{ h1 }}</a></li>{% endfor %}
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold">Developers</h2>
+      <ul class="mt-3 space-y-2 text-sm text-muted">
+        <li><a class="hover:text-ink" href="/docs">Documentation</a></li>
+        <li><a class="hover:text-ink" href="/docs/api">API reference</a></li>
+        <li><a class="hover:text-ink" href="/docs/widgets">Widgets</a></li>
+        <li><a class="hover:text-ink" href="https://github.com/bishalde/countjar">GitHub</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold">Product</h2>
+      <ul class="mt-3 space-y-2 text-sm text-muted">
+        <li><a class="hover:text-ink" href="{{ url_for('site.pricing') }}">Pricing</a></li>
+        <li><a class="hover:text-ink" href="{{ url_for('auth.login') }}">Sign in</a></li>
+        <li><a class="hover:text-ink" href="{{ url_for('site.landing') }}#playground">Try the demo counter</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 pb-10 text-xs text-muted sm:px-6">
+    <span>© {{ now_year }} CountJar. Sign-in codes are sent with Twilio Verify.</span>
+    {% set visitors = site_visitor_count() %}
+    <span class="inline-flex items-center gap-2 rounded-full border border-line px-3 py-1" title="Counted with a CountJar counter, once per visitor per day">
+      <span class="size-1.5 rounded-full bg-honey" aria-hidden="true"></span>
+      <span><span class="font-mono font-semibold text-ink">{{ visitors | intcomma }}</span> {{ "visitor" if visitors == 1 else "visitors" }}, counted by CountJar itself</span>
+    </span>
+  </div>
+</footer>

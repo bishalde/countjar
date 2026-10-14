@@ -1,0 +1,13 @@
+{
+  "name": "countjar-tailwind",
+  "private": true,
+  "description": "Builds countjar/static/app.css from Tailwind. The compiled CSS is committed so Vercel needs no Node build.",
+  "scripts": {
+    "build": "tailwindcss -i app.css -o ../countjar/static/app.css --minify",
+    "watch": "tailwindcss -i app.css -o ../countjar/static/app.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

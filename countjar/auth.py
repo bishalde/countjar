@@ -19,11 +19,14 @@ COUNTRIES = [
 ]
 
 
-def normalize_phone(dial, number):
+DIAL = {code: dial for code, dial, _ in COUNTRIES}
+
+
+def normalize_phone(country, number):
     number = re.sub(r"[^\d+]", "", number or "")
     if number.startswith("+"):
         return number
-    return (dial or "+1") + number.lstrip("0")
+    return DIAL.get(country, "+1") + number.lstrip("0")
 
 
 def mask(phone):
@@ -41,7 +44,7 @@ def login():
     if current_user():
         return redirect(safe_next(request.args.get("next")))
     if request.method == "POST":
-        phone = normalize_phone(request.form.get("dial"), request.form.get("phone"))
+        phone = normalize_phone(request.form.get("country"), request.form.get("phone"))
         if not config.PHONE.match(phone):
             flash("Enter a valid mobile number.", "error")
             return render_template("auth/login.html", countries=COUNTRIES, form=request.form), 400
