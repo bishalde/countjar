@@ -276,3 +276,11 @@ def test_site_visit_counting_never_breaks_the_page(client, monkeypatch):
     monkeypatch.setattr(counters, "apply", boom)
     resp = client.get("/", headers={"User-Agent": "Mozilla/5.0 Firefox/130"})
     assert resp.status_code == 200
+
+
+def test_footer_credits_developer_and_links(client):
+    html = client.get("/").get_data(as_text=True)
+    assert "Made with" in html and ">Bishal</a>" in html
+    for href in ("https://github.com/bishalde/countjar", "https://www.linkedin.com/in/bishalde/",
+                 "https://bishalde.vercel.app/"):
+        assert f'href="{href}" target="_blank" rel="noopener noreferrer"' in html
