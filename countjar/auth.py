@@ -53,14 +53,19 @@ def login():
         if not phone.startswith(ALLOWED_DIALS):
             flash("CountJar can't send sign-in codes to that country yet.", "error")
             return render_template("auth/login.html", countries=COUNTRIES, form=request.form), 400
-        ip = visitors.client_ip(request)
-        if not (ratelimit.hit(f"otp:phone:{phone}", 5, 3600).allowed and
-                ratelimit.hit(f"otp:ip:{ip}", 10, 3600).allowed):
-            flash("Too many codes requested. Try again in an hour.", "error")
+        keys = [(f"otp:phone:{phone}", 5), (f"otp:ip:{visitors.client_ip(request)}", 10)]
+        hits = [ratelimit.hit(key, n, 3600) for key, n in keys]
+        blocked = [h for h in hits if not h.allowed]
+        if blocked:
+            wait = ratelimit.wait_text(max(h.reset for h in blocked))
+            flash(f"Too many codes requested. Try again in {wait}.", "error")
             return render_template("auth/login.html", countries=COUNTRIES, form=request.form), 429
         try:
             verify.send_code(phone)
         except verify.VerifyError as e:
+            # No code went out, so this attempt shouldn't count against the limits.
+            for key, _ in keys:
+                ratelimit.refund(key, 3600)
             flash(str(e), "error")
             return render_template("auth/login.html", countries=COUNTRIES, form=request.form), 502
         session["pending_phone"] = phone
@@ -106,14 +111,16 @@ def resend():
     phone = session.get("pending_phone")
     if not phone:
         return redirect(url_for("auth.login"))
-    if ratelimit.hit(f"otp:phone:{phone}", 5, 3600).allowed:
+    rl = ratelimit.hit(f"otp:phone:{phone}", 5, 3600)
+    if rl.allowed:
         try:
             verify.send_code(phone)
             flash("New code sent.", "success")
         except verify.VerifyError as e:
+            ratelimit.refund(f"otp:phone:{phone}", 3600)
             flash(str(e), "error")
     else:
-        flash("Too many codes requested. Try again in an hour.", "error")
+        flash(f"Too many codes requested. Try again in {ratelimit.wait_text(rl.reset)}.", "error")
     return redirect(url_for("auth.verify_code"))
 
 

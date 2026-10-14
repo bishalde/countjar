@@ -284,3 +284,29 @@ def test_site_visit_counting_never_breaks_the_page(client, monkeypatch):
     monkeypatch.setattr(counters, "apply", boom)
     resp = client.get("/", headers={"User-Agent": "Mozilla/5.0 Firefox/130"})
     assert resp.status_code == 200
+
+
+def test_failed_code_sends_do_not_use_up_attempts(app, client, monkeypatch):
+    from countjar import verify
+
+    def fail(phone):
+        raise verify.VerifyError("Phone verification is not configured on this server.")
+    monkeypatch.setattr(verify, "send_code", fail)
+    with app.app_context():
+        for _ in range(8):
+            resp = post(client, "/login", {"country": "US", "phone": "4155550142"})
+            assert "not configured" in resp.get_data(as_text=True)
+            assert "Too many codes" not in resp.get_data(as_text=True)
+
+
+def test_code_limit_says_how_long_to_wait(app, client):
+    with app.app_context():
+        for _ in range(5):
+            post(client, "/login", {"country": "US", "phone": "4155550143"})
+            client.get("/logout")
+        with client.session_transaction() as s:
+            s.pop("pending_phone", None)
+        resp = post(client, "/login", {"country": "US", "phone": "4155550143"})
+    body = resp.get_data(as_text=True)
+    assert resp.status_code == 429
+    assert re.search(r"Try again in (a minute|\d+ minutes)", body)

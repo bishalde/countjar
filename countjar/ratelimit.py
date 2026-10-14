@@ -23,3 +23,15 @@ def hit(key, limit, window=60):
     count = doc["count"]
     reset = max(1, int(start + window - now))
     return Limit(count <= limit, limit, max(0, limit - count), reset)
+
+
+def refund(key, window=60):
+    """Give back one hit in the current window, e.g. when the action it guarded never happened."""
+    start = int(time.time() // window) * window
+    db.col("ratelimits").update_one({"_id": f"{key}:{start}", "count": {"$gt": 0}},
+                                    {"$inc": {"count": -1}})
+
+
+def wait_text(seconds):
+    minutes = -(-seconds // 60)
+    return "a minute" if minutes <= 1 else f"{minutes} minutes"
