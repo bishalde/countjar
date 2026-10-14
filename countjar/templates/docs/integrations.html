@@ -1,0 +1,203 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note, tabbed, panel %}
+{% set toc = [("setup", "Before you start"), ("server", "Count from your server"), ("browser", "Count on a web page"), ("nextjs", "Next.js"), ("read", "Read a number"), ("errors", "Handle errors and limits"), ("export", "Export data")] %}
+{% set base = site_url ~ "/api/v2" %}
+{% block content %}
+<h1>Code examples</h1>
+<p class="lead">Copy-paste examples for the most common jobs. Each one is complete and works as written once you swap in your workspace, counter and token.</p>
+
+<h2 id="setup">Before you start</h2>
+<p>The examples use a workspace called <code>acme</code> with two counters:</p>
+<ul>
+  <li><code>visits</code>, a <strong>public</strong> counter for page views, counted from the browser with no token;</li>
+  <li><code>signups</code>, a <strong>private</strong> counter counted from a server with a <code>write</code> token.</li>
+</ul>
+<p>Server examples read the token from an environment variable called <code>COUNTJAR_TOKEN</code>, so it never ends up in your code:</p>
+{% call code("bash") %}export COUNTJAR_TOKEN=cj_your_token{% endcall %}
+
+<h2 id="server">Count from your server</h2>
+<p>Count a sign-up, tag it with the plan, and print the new total. Extra query parameters like <code>plan</code> are saved with the event as <a href="/docs/api#props">custom properties</a>.</p>
+{% call tabbed([("curl", "curl"), ("node", "Node.js"), ("python", "Python"), ("go", "Go"), ("php", "PHP")], "curl") %}
+{% call panel("curl") %}{% call code("bash") %}curl -X POST "{{ base }}/acme/signups/up?plan=pro" \
+  -H "Authorization: Bearer $COUNTJAR_TOKEN"{% endcall %}{% endcall %}
+{% call panel("node") %}{% call code("javascript") %}// Node.js 18 or later has fetch built in.
+const res = await fetch("{{ base }}/acme/signups/up?plan=pro", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${process.env.COUNTJAR_TOKEN}` },
+});
+const data = await res.json();
+if (!res.ok) throw new Error(`CountJar ${data.error.code}: ${data.error.message}`);
+console.log(`Sign-ups so far: ${data.count}`);{% endcall %}{% endcall %}
+{% call panel("python") %}{% call code("python") %}import os
+
+import requests
+
+resp = requests.post(
+    "{{ base }}/acme/signups/up",
+    params={"plan": "pro"},
+    headers={"Authorization": f"Bearer {os.environ['COUNTJAR_TOKEN']}"},
+    timeout=5,
+)
+data = resp.json()
+if not resp.ok:
+    raise RuntimeError(f"CountJar {data['error']['code']}: {data['error']['message']}")
+print("Sign-ups so far:", data["count"]){% endcall %}{% endcall %}
+{% call panel("go") %}{% call code("go") %}package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+)
+
+func main() {
+	req, err := http.NewRequest("POST", "{{ base }}/acme/signups/up?plan=pro", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+os.Getenv("COUNTJAR_TOKEN"))
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		Count int64 `json:"count"`
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		log.Fatal(err)
+	}
+	if resp.StatusCode >= 400 {
+		log.Fatalf("CountJar %s: %s", body.Error.Code, body.Error.Message)
+	}
+	fmt.Println("Sign-ups so far:", body.Count)
+}{% endcall %}{% endcall %}
+{% call panel("php") %}{% call code("php") %}<?php
+$ch = curl_init("{{ base }}/acme/signups/up?plan=pro");
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT => 5,
+    CURLOPT_HTTPHEADER => ["Authorization: Bearer " . getenv("COUNTJAR_TOKEN")],
+]);
+$data = json_decode(curl_exec($ch), true);
+$status = curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+curl_close($ch);
+
+if ($status >= 400) {
+    throw new RuntimeException("CountJar {$data['error']['code']}: {$data['error']['message']}");
+}
+echo "Sign-ups so far: {$data['count']}\n";{% endcall %}{% endcall %}
+{% endcall %}
+{% call note() %}Counting is quick, but it's still a network call. If a count isn't critical to the request, run it after you've responded or in a background job, and don't fail the user's action when CountJar is unreachable.{% endcall %}
+
+<h2 id="browser">Count on a web page</h2>
+<p>Browser code can be read by anyone, so it must never contain a token. Use a <strong>public</strong> counter: anyone can count it up by one, and nobody can subtract, set or reset it without a token.</p>
+<p>If you only want to show the number, the <a href="/docs/widgets">widget</a> does it in two lines. To use the number in your own design:</p>
+{% call tabbed([("js", "JavaScript"), ("react", "React")], "js") %}
+{% call panel("js") %}{% call code("html") %}<p>This page has been viewed <span id="views">…</span> times.</p>
+
+<script>
+  fetch("{{ base }}/acme/visits/up", { method: "POST" })
+    .then((res) => res.json())
+    .then((data) => {
+      document.getElementById("views").textContent = data.count.toLocaleString();
+    })
+    .catch(() => {
+      document.getElementById("views").textContent = "many";
+    });
+</script>{% endcall %}{% endcall %}
+{% call panel("react") %}{% call code("jsx") %}import { useEffect, useState } from "react";
+
+export function ViewCount({ workspace = "acme", counter = "visits" }) {
+  const [count, setCount] = useState(null);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetch(`{{ base }}/${workspace}/${counter}/up`, { method: "POST", signal: ctrl.signal })
+      .then((res) => res.json())
+      .then((data) => setCount(data.count))
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [workspace, counter]);
+
+  return <span>{count === null ? "…" : count.toLocaleString()} views</span>;
+}{% endcall %}{% endcall %}
+{% endcall %}
+{% call note() %}In development, React's Strict Mode runs effects twice, so you'll see two counts per page load. Production builds count once. Turning on <a href="/docs/api#unique">unique counting</a> also stops repeat counts from the same visitor.{% endcall %}
+<p>To read a number without counting, call the counter's URL without <code>/up</code>.</p>
+
+<h2 id="nextjs">Next.js</h2>
+<p>With the App Router you can count on the server, where your token is safe. This server action counts a sign-up after it's saved:</p>
+{% call code("typescript") %}// app/signup/actions.ts
+"use server";
+
+export async function signUp(formData: FormData) {
+  // ... create the user ...
+
+  await fetch("{{ base }}/acme/signups/up?plan=" + encodeURIComponent(String(formData.get("plan"))), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${process.env.COUNTJAR_TOKEN}` },
+    cache: "no-store",
+  }).catch(() => {}); // never block a sign-up on a counter
+}{% endcall %}
+<p>And this server component shows a public total, refreshed at most once a minute:</p>
+{% call code("tsx") %}// app/components/download-count.tsx
+export async function DownloadCount() {
+  const res = await fetch("{{ base }}/acme/downloads", { next: { revalidate: 60 } });
+  if (!res.ok) return null;
+  const { count } = await res.json();
+  return <p>Downloaded {count.toLocaleString()} times</p>;
+}{% endcall %}
+<p>Add <code>COUNTJAR_TOKEN</code> to your <code>.env.local</code> file and to your host's environment settings. Don't prefix it with <code>NEXT_PUBLIC_</code>, or Next.js will send it to the browser.</p>
+
+<h2 id="read">Read a number</h2>
+<p>Reading is a <code>GET</code> on the counter's URL. Add <code>?window=24h</code> to also get recent activity:</p>
+{% call code("python") %}import requests
+
+data = requests.get("{{ base }}/acme/visits", params={"window": "24h"}, timeout=5).json()
+print(f"{data['count']:,} views, {data['window']['count']:,} in the last day")
+print(f"{data['window']['unique']:,} different visitors in the last day"){% endcall %}
+<p>Private counters need a <code>read</code> token in the <code>Authorization</code> header, just like the server examples above. For a fuller summary use <a href="/docs/api#stats"><code>/stats</code></a>, and for chart data use <a href="/docs/api#history"><code>/history</code></a>.</p>
+
+<h2 id="errors">Handle errors and limits</h2>
+<p>Failed requests return a JSON error with a stable <code>code</code> you can check. When you're rate limited, the <code>Retry-After</code> header says how many seconds to wait:</p>
+{% call code("javascript") %}async function countUp(path, token, attempts = 3) {
+  for (let i = 1; i <= attempts; i++) {
+    const res = await fetch(`{{ base }}/${path}/up`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.status === 429 && i < attempts) {
+      const wait = Number(res.headers.get("Retry-After") || 1);
+      await new Promise((r) => setTimeout(r, wait * 1000));
+      continue;
+    }
+    const data = await res.json();
+    if (!res.ok) throw new Error(`${data.error.code}: ${data.error.message}`);
+    return data;
+  }
+}
+
+const { count } = await countUp("acme/signups", process.env.COUNTJAR_TOKEN);{% endcall %}
+<p>Only retry <code>429</code> and network errors. Other errors, like <code>401</code> for a missing token or <code>404</code> for a misspelt counter, will fail the same way every time. <a href="/docs/limits">Limits and errors</a> lists every code.</p>
+
+<h2 id="export">Export data</h2>
+<p>History and events can come back as CSV, ready for a spreadsheet:</p>
+{% call code("bash") %}# Daily totals for the last 90 days
+curl -H "Authorization: Bearer $COUNTJAR_TOKEN" \
+  "{{ base }}/acme/visits/history?range=90d&format=csv" -o visits-90d.csv
+
+# The last 1,000 events tagged with plan=pro
+curl -H "Authorization: Bearer $COUNTJAR_TOKEN" \
+  "{{ base }}/acme/signups/events?limit=1000&filter=plan=pro&format=csv" -o pro-signups.csv{% endcall %}
+<p>You can also download both from the counter's page in the dashboard.</p>
+{% endblock %}

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}{{ page_title }} · CountJar docs{% endblock %}
+{% block description %}{{ page_description }}{% endblock %}
+{% block jsonld %}<script type="application/ld+json">{{ jsonld | tojson }}</script>{% endblock %}
+
+{% block body %}
+{% include "partials/site_header.html" %}
+<div class="mx-auto grid max-w-7xl gap-10 px-4 pb-8 sm:px-6 lg:grid-cols-[13rem_minmax(0,1fr)] xl:grid-cols-[13rem_minmax(0,1fr)_12rem]">
+
+  <!-- Docs navigation -->
+  <aside class="lg:sticky lg:top-6 lg:self-start lg:pt-10" x-data="{ open: false }">
+    <button type="button" class="btn btn-outline w-full justify-between lg:hidden" @click="open = !open" :aria-expanded="open">
+      <span class="flex items-center gap-2">{{ icon("book") }} {{ nav_title }}</span>{{ icon("chevron", "size-3.5") }}
+    </button>
+    <nav aria-label="Documentation" class="mt-2 hidden lg:mt-0 lg:block" :class="open && '!block'">
+      <a href="/docs" class="mb-3 hidden items-center gap-2 text-sm font-semibold lg:flex">{{ icon("book") }} Documentation</a>
+      <ul class="space-y-0.5 text-sm">
+        {% for p_slug, p_nav, _, _ in pages %}
+        <li><a href="{{ url(p_slug) }}" class="doc-nav {{ 'is-active' if p_slug == slug }}"{% if p_slug == slug %} aria-current="page"{% endif %}>{{ p_nav }}</a></li>
+        {% endfor %}
+      </ul>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-primary mt-6 hidden w-full lg:inline-flex">Create a free account</a>
+    </nav>
+  </aside>
+
+  <!-- Page -->
+  <main id="main" class="min-w-0 pt-6 lg:pt-10">
+    <nav aria-label="Breadcrumb" class="text-sm text-muted">
+      <a href="/docs" class="hover:text-ink">Docs</a>{% if slug != "start" %} <span aria-hidden="true">/</span> <span class="text-ink">{{ nav_title }}</span>{% endif %}
+    </nav>
+    <article class="doc mt-3">
+      {% block content %}{% endblock %}
+    </article>
+
+    <nav aria-label="Pager" class="mt-16 grid gap-4 border-t border-line pt-8 sm:grid-cols-2">
+      {% if prev %}
+      <a href="{{ url(prev[0]) }}" class="panel block p-4 hover:border-honey">
+        <span class="text-xs text-muted">Previous</span><span class="mt-1 block font-semibold">{{ prev[1] }}</span>
+      </a>
+      {% else %}<span></span>{% endif %}
+      {% if next %}
+      <a href="{{ url(next[0]) }}" class="panel block p-4 text-right hover:border-honey">
+        <span class="text-xs text-muted">Next</span><span class="mt-1 block font-semibold">{{ next[1] }}</span>
+      </a>
+      {% endif %}
+    </nav>
+  </main>
+
+  <!-- On this page -->
+  {% if toc %}
+  <aside class="hidden xl:block xl:sticky xl:top-6 xl:self-start xl:pt-10" aria-label="On this page">
+    <p class="text-sm font-semibold">On this page</p>
+    <ul class="mt-3 space-y-2 border-l border-line text-sm">
+      {% for id, label in toc %}<li><a href="#{{ id }}" class="-ml-px block border-l border-transparent pl-3 text-muted hover:border-honey hover:text-ink">{{ label }}</a></li>{% endfor %}
+    </ul>
+  </aside>
+  {% endif %}
+</div>
+{% include "partials/site_footer.html" %}
+{% endblock %}

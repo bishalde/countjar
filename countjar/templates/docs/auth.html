@@ -1,0 +1,75 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note, params %}
+{% set toc = [("sign-in", "Signing in"), ("workspaces", "Workspaces"), ("teammates", "Teammates"), ("tokens", "API tokens"), ("sending", "Sending a token"), ("who-needs", "When you need a token"), ("safety", "Keeping tokens safe"), ("account", "Your account")] %}
+{% block content %}
+<h1>Accounts and tokens</h1>
+<p class="lead">You sign in to the dashboard with a code sent to your phone. Programs use API tokens instead. This page covers both, and how workspaces and teammates fit in.</p>
+
+<h2 id="sign-in">Signing in</h2>
+<p>CountJar uses one-time codes instead of passwords, delivered by text message through Twilio Verify. The same steps create a new account or sign in to an existing one:</p>
+<ol>
+  <li>Open <a href="{{ url_for('auth.login') }}">Sign in</a>, pick your country and enter your mobile number.</li>
+  <li>Type the 6-digit code from the text message. If it doesn't arrive, you can ask for a new one after 30 seconds.</li>
+  <li>The first time, choose your name and your first workspace's address.</li>
+</ol>
+<p>You stay signed in on that browser for 30 days, or until you sign out. To protect your number, each phone number can request 5 codes an hour, and each number allows 10 code attempts an hour.</p>
+{% call note() %}Your phone number is only used to sign you in and, if you choose, to send you milestone texts. It's never shown to other people, except teammates in workspaces you share.{% endcall %}
+
+<h2 id="workspaces">Workspaces</h2>
+<p>A workspace groups counters, tokens and teammates. Its address is part of every counter URL, so <code>acme</code> gives you URLs like <code>{{ site_url }}/api/v2/acme/visits</code>. Addresses use 1 to 64 lowercase letters, digits, <code>-</code> or <code>_</code>, and they can't be changed once created.</p>
+<p>You can own up to 3 workspaces. Your 5 counters are shared across all the workspaces you own, so you can keep 5 in one workspace or spread them out. Switch between workspaces, or create a new one, from the menu at the top of the dashboard sidebar.</p>
+
+<h2 id="teammates">Teammates</h2>
+<p>As the owner, open <strong>Members</strong> and add a teammate by their phone number. They need a CountJar account first, so ask them to sign up. Members can:</p>
+<ul>
+  <li>see every counter in the workspace, change them, and create new ones (which use the owner's counter allowance);</li>
+  <li>add milestone webhooks, and text alerts to their own phone.</li>
+</ul>
+<p>Only the owner can create or revoke API tokens, add or remove members, rename the workspace or delete it. Members can leave a workspace at any time from the same page.</p>
+<p>When someone leaves or is removed, any tokens they created are revoked and their text alerts in that workspace are deleted.</p>
+
+<h2 id="tokens">API tokens</h2>
+<p>Tokens let scripts, servers and CI use the API. The workspace owner creates them under <strong>API tokens</strong>. Give each one a name you'll recognise later and choose what it may do:</p>
+<div class="doc-table"><table>
+  <thead><tr><th>Permission</th><th>Allows</th></tr></thead>
+  <tbody>
+    <tr><td><code>read</code></td><td>Read private counters, their stats and history, and raw events.</td></tr>
+    <tr><td><code>write</code></td><td>Everything in <code>read</code>, plus every counting action: up, down, set, reset, custom step sizes, and actions on private counters.</td></tr>
+    <tr><td><code>admin</code></td><td>Everything in <code>write</code>, plus creating, changing and deleting counters through the API.</td></tr>
+  </tbody>
+</table></div>
+<p>A token works only in the workspace it was created in. The full token, starting with <code>cj_</code>, is shown once when you create it. CountJar only stores a fingerprint of it, so copy it straight away. If you lose it, revoke it and create another.</p>
+
+<h2 id="sending">Sending a token</h2>
+<p>Send the token in the <code>Authorization</code> header, as a Bearer token:</p>
+{% call code("bash") %}curl -H "Authorization: Bearer cj_your_token" \
+  {{ site_url }}/api/v2/acme/signups/up{% endcall %}
+<p>Where you can't set headers, such as a webhook from another service, you can pass it as a <code>token</code> query parameter instead:</p>
+{% call code() %}{{ site_url }}/api/v2/acme/signups/up?token=cj_your_token{% endcall %}
+{% call note("warn") %}URLs end up in logs and browser history, so prefer the header whenever you can.{% endcall %}
+<p>The API never uses your dashboard sign-in. Being signed in to CountJar in the same browser gives a request no extra access, so another website can't use your session to change your counters.</p>
+
+<h2 id="who-needs">When you need a token</h2>
+<div class="doc-table"><table>
+  <thead><tr><th>Request</th><th>Public counter</th><th>Private counter</th></tr></thead>
+  <tbody>
+    <tr><td>Read the value, stats or history</td><td>No token</td><td><code>read</code></td></tr>
+    <tr><td><code>up</code>, <code>like</code>, <code>vote</code>, <code>rate</code></td><td>No token</td><td><code>write</code></td></tr>
+    <tr><td><code>up?by=5</code> (custom step)</td><td><code>write</code></td><td><code>write</code></td></tr>
+    <tr><td><code>down</code>, <code>set</code>, <code>reset</code></td><td><code>write</code></td><td><code>write</code></td></tr>
+    <tr><td>Raw events</td><td><code>read</code></td><td><code>read</code></td></tr>
+    <tr><td>Create, change or delete counters</td><td><code>admin</code></td><td><code>admin</code></td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="safety">Keeping tokens safe</h2>
+<ul>
+  <li>Keep tokens on servers, in scripts and in CI secrets. Anything sent to a browser can be read by visitors.</li>
+  <li>For counting on a website, use a <strong>public</strong> counter and no token at all. The <a href="/docs/widgets">widgets</a> work this way.</li>
+  <li>Give each program its own token with the lowest permission it needs, so you can revoke one without breaking the others.</li>
+  <li>The tokens page shows when each token was last used, which helps you spot ones you no longer need.</li>
+</ul>
+
+<h2 id="account">Your account</h2>
+<p>Change your name under <strong>Account</strong>. Deleting your account there also deletes every workspace you own, with all their counters, history and tokens, and removes you from workspaces you were added to. It can't be undone.</p>
+{% endblock %}

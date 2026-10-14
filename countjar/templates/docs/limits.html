@@ -1,0 +1,88 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note %}
+{% set toc = [("plan", "Plan limits"), ("rate", "Rate limits"), ("errors", "Error format"), ("codes", "Error codes"), ("faq", "Common questions")] %}
+{% block content %}
+<h1>Limits and errors</h1>
+<p class="lead">What every account gets, how rate limiting works, and what each error means.</p>
+
+<h2 id="plan">Plan limits</h2>
+<p>Every account is free and gets the same limits:</p>
+<div class="doc-table"><table>
+  <thead><tr><th>Limit</th><th>Amount</th></tr></thead>
+  <tbody>
+    <tr><td>Counters</td><td>5 per account, shared across all the workspaces you own</td></tr>
+    <tr><td>Workspaces</td><td>3 that you own. You can be a member of any number.</td></tr>
+    <tr><td>Counts</td><td>10,000 a day per account, across all your workspaces. Resets at 00:00 UTC.</td></tr>
+    <tr><td>Milestones</td><td>10 per counter</td></tr>
+    <tr><td>Milestone texts</td><td>5 a day per phone number</td></tr>
+    <tr><td>Sign-in codes</td><td>5 an hour per phone number, and 10 tries at entering them</td></tr>
+  </tbody>
+</table></div>
+<p>A count is any change to a counter: up, down, set, reset, like, vote or rate, whether it comes from the API, a widget, a badge or the dashboard. Reading counters, stats and history doesn't count.</p>
+<p>The counters in a workspace you've been added to use its owner's allowance, not yours. Deleting a counter frees its slot straight away.</p>
+
+<h2 id="rate">Rate limits</h2>
+<p>Each token, or each IP address for requests without a token, can make 600 requests a minute to any one URL. Every API response tells you where you stand:</p>
+{% call code() %}X-RateLimit-Limit: 600
+X-RateLimit-Remaining: 587{% endcall %}
+<p>Over the limit you get <code>429</code> with the code <code>rate_limited</code> and a <code>Retry-After</code> header with the number of seconds to wait. There's an <a href="/docs/integrations#errors">example of retrying</a> in the code examples.</p>
+<p>Badges and pixels have the same per-visitor limit, but they never show an error. Over the limit, a badge still shows the number and the visit simply isn't counted. Widgets call the API, so they follow the API's limits.</p>
+
+<h2 id="errors">Error format</h2>
+<p>Every API error has the same shape:</p>
+{% call code("json") %}{
+  "error": {
+    "code": "unauthorized",
+    "message": "“down” needs an API token with 'write' permission."
+  }
+}{% endcall %}
+<p>Use <code>code</code> in your program; it won't change. <code>message</code> is written for people and may be reworded.</p>
+
+<h2 id="codes">Error codes</h2>
+<div class="doc-table"><table>
+  <thead><tr><th>Status</th><th>Code</th><th>What happened</th></tr></thead>
+  <tbody>
+    <tr><td>400</td><td><code>invalid_value</code></td><td>A <code>by</code>, <code>value</code> or <code>choice</code> is missing, isn't a whole number, or is out of range.</td></tr>
+    <tr><td>400</td><td><code>out_of_bounds</code></td><td><code>set</code> was given a value outside the counter's minimum and maximum.</td></tr>
+    <tr><td>400</td><td><code>unsupported_action</code></td><td>The action doesn't fit the counter type, such as <code>vote</code> on a normal counter or <code>up</code> on a poll.</td></tr>
+    <tr><td>400</td><td><code>invalid_window</code></td><td><code>window</code> isn't like <code>15m</code>, <code>24h</code> or <code>7d</code>, or is longer than 90 days.</td></tr>
+    <tr><td>400</td><td><code>invalid_range</code></td><td><code>range</code> isn't <code>24h</code>, <code>7d</code>, <code>30d</code> or <code>90d</code>.</td></tr>
+    <tr><td>400</td><td><code>invalid_name</code></td><td>A new counter's name isn't 1 to 64 lowercase letters, digits, <code>-</code> or <code>_</code>.</td></tr>
+    <tr><td>400</td><td><code>invalid_setting</code></td><td>A counter setting isn't valid, for example a minimum above the maximum.</td></tr>
+    <tr><td>400</td><td><code>invalid_body</code></td><td>The request body is JSON but not an object.</td></tr>
+    <tr><td>401</td><td><code>unauthorized</code></td><td>This request needs a token and none was sent.</td></tr>
+    <tr><td>401</td><td><code>invalid_token</code></td><td>The token is wrong or has been revoked.</td></tr>
+    <tr><td>403</td><td><code>forbidden</code></td><td>The token doesn't have the permission this request needs.</td></tr>
+    <tr><td>403</td><td><code>wrong_workspace</code></td><td>The token belongs to a different workspace.</td></tr>
+    <tr><td>403</td><td><code>counter_limit</code></td><td>You've used all 5 counters. Delete one to create another.</td></tr>
+    <tr><td>404</td><td><code>not_found</code></td><td>The workspace, counter or action doesn't exist. Names are case-sensitive and always lowercase.</td></tr>
+    <tr><td>405</td><td><code>method_not_allowed</code></td><td>Stats, history and events only accept <code>GET</code>.</td></tr>
+    <tr><td>409</td><td><code>exists</code></td><td>A counter with that name already exists in the workspace.</td></tr>
+    <tr><td>429</td><td><code>rate_limited</code></td><td>Too many requests. Wait for <code>Retry-After</code> seconds.</td></tr>
+    <tr><td>429</td><td><code>quota_exceeded</code></td><td>The account has used its 10,000 counts for today. Counting resumes at 00:00 UTC; reading still works.</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="faq">Common questions</h2>
+
+<h3>Why did my request return <code>"counted": false</code>?</h3>
+<p>The request worked, but the number didn't change. Either the visitor was already counted (unique counting, likes, votes and ratings), or the counter is at its maximum (counting up) or minimum (counting down).</p>
+
+<h3>Can people inflate my public counter?</h3>
+<p>Anyone can count up a public counter by one at a time; that's what makes widgets work without a token. Rate limits slow down anyone trying to run it up, and <a href="/docs/api#unique">unique counting</a> means repeat visits from the same person don't count. Nobody can subtract, set, reset or use a custom step without a token. If a number must only change from your own code, make the counter private.</p>
+
+<h3>Can I rename a counter or workspace address?</h3>
+<p>No, because the name is part of every URL that uses it. Create a new counter, <a href="/docs/api#set">set</a> it to the old value, and delete the old one. A workspace's display name can be changed in its settings; its address can't.</p>
+
+<h3>Why does my count go up twice in development?</h3>
+<p>React's Strict Mode runs effects twice in development, and some dev servers reload the page. Production builds count once. See <a href="/docs/integrations#browser">counting on a web page</a>.</p>
+
+<h3>Can I use it from a static site?</h3>
+<p>Yes. Use a public counter with the <a href="/docs/widgets">widget</a>, a <a href="/docs/widgets#badges">badge</a>, or a <code>fetch</code> call. None of them need a server or a token.</p>
+
+<h3>Does CountJar store visitors' IP addresses?</h3>
+<p>No. To recognise repeat visitors it keeps a keyed fingerprint made from the IP address and browser, which can't be turned back into either. Events also keep the host name of the page the request came from, if the browser sends one.</p>
+
+<h3>How do I get more than 5 counters?</h3>
+<p>Every account gets 5. Free one up by deleting a counter you no longer need. A poll or rating counter can often replace several normal ones, and <a href="/docs/api#props">custom properties</a> let one counter track many things, such as every issue of a newsletter.</p>
+{% endblock %}

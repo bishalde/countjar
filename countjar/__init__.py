@@ -45,7 +45,7 @@ def create_app(test_config=None):
             resp.headers.setdefault("X-Frame-Options", "DENY")  # widgets use Shadow DOM, not iframes
         return resp
 
-    from . import api, auth, csrf, embed, site, web
+    from . import api, auth, csrf, docs, embed, site, web
 
     csrf.init_app(app)
     app.register_blueprint(site.bp)
@@ -53,6 +53,7 @@ def create_app(test_config=None):
     app.register_blueprint(web.bp)
     app.register_blueprint(api.bp)
     app.register_blueprint(embed.bp)
+    app.register_blueprint(docs.bp)
 
     register_filters(app)
     register_errors(app)

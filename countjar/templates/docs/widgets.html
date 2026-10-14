@@ -1,0 +1,86 @@
+{% extends "docs/_layout.html" %}
+{% from "docs/_macros.html" import code, note, params %}
+{% set toc = [("widget", "The widget"), ("options", "Widget options"), ("like", "Like button"), ("poll", "Poll"), ("rating", "Star rating"), ("spa", "Single-page apps"), ("badges", "Badges"), ("badge-options", "Badge options"), ("pixel", "Tracking pixel"), ("public-only", "Public counters only")] %}
+{% block content %}
+<h1>Widgets and badges</h1>
+<p class="lead">Show a counter anywhere without writing code: a widget for web pages, an SVG badge for READMEs, and an invisible pixel for emails. All three work with public counters and need no token.</p>
+
+<h2 id="widget">The widget</h2>
+<p>Add an element with the class <code>countjar</code> wherever the number should appear, and load the script once per page:</p>
+{% call code("html") %}<div class="countjar" data-workspace="acme" data-counter="visits"></div>
+<script src="{{ site_url }}/embed.js" async></script>{% endcall %}
+<p>Each page load counts one visit and shows the total, animating up from zero. The widget draws inside its own Shadow DOM, so your page's styles don't leak into it and its styles don't leak out. It doesn't set cookies. Like, poll and rating widgets remember a visitor's choice in their browser's local storage, so the button shows what they picked last time.</p>
+<p>The <strong>Embed</strong> tab on each counter in the dashboard builds this snippet for you and shows a live preview as you change the options.</p>
+
+<h2 id="options">Widget options</h2>
+<p>Set options as <code>data-</code> attributes on the element. Options without a value, like <code>data-readonly</code>, are switched on just by being there.</p>
+{{ params([
+  ("data-workspace", "Required. The workspace address."),
+  ("data-counter", "Required. The counter name."),
+  ("data-type", "<code>count</code> (default), <code>like</code>, <code>poll</code> or <code>rating</code>. Match the counter's type."),
+  ("data-theme", "<code>light</code> (default), <code>dark</code>, or <code>glass</code> for a frosted look over images and colour."),
+  ("data-icon", "<code>eye</code> (default), <code>heart</code>, <code>star</code>, <code>fire</code>, <code>download</code>, <code>users</code>, <code>thumbs</code> or <code>bolt</code>."),
+  ("data-label", "Text after the number, such as <code>views</code>."),
+  ("data-readonly", "Show the number without counting a visit."),
+  ("data-window", "Show recent activity instead of the all-time total, such as <code>24h</code> or <code>7d</code>."),
+  ("data-abbreviate", "Shorten big numbers: 12.4k, 3.1M."),
+  ("data-start", "Add this to the displayed number, for example to include visits from before you used CountJar."),
+  ("data-hide-zero", "Hide the widget until the number is above zero."),
+  ("data-no-anim", "Show the number straight away instead of counting up. The widget also skips the animation for visitors who've asked for reduced motion."),
+  ("data-no-link", "Remove the small CountJar link."),
+  ("data-color, data-bg, data-accent", "Any CSS colour for the text, background and icon or button highlight."),
+  ("data-question", "Poll widgets only. The question above the buttons. Defaults to “Was this helpful?”."),
+]) }}
+{% call code("html") %}<div class="countjar" data-workspace="acme" data-counter="downloads"
+     data-icon="download" data-label="downloads" data-theme="dark" data-abbreviate></div>{% endcall %}
+
+<h2 id="like">Like button</h2>
+<p>Create a <strong>like</strong> counter, then:</p>
+{% call code("html") %}<div class="countjar" data-type="like" data-workspace="acme" data-counter="post-42-likes"></div>{% endcall %}
+<p>Visitors click the heart to like. Each visitor can like once: the server only counts their first like, and the button stays filled in on their next visit. Showing the button doesn't count anything.</p>
+
+<h2 id="poll">Poll</h2>
+<p>Create a <strong>poll</strong> counter, then:</p>
+{% call code("html") %}<div class="countjar" data-type="poll" data-workspace="acme" data-counter="docs-helpful"
+     data-question="Did this page answer your question?"></div>{% endcall %}
+<p>Visitors pick yes or no and then see the results as percentages. Add <code>data-readonly</code> to only show the results.</p>
+
+<h2 id="rating">Star rating</h2>
+<p>Create a <strong>rating</strong> counter, then:</p>
+{% call code("html") %}<div class="countjar" data-type="rating" data-workspace="acme" data-counter="recipe-rating"></div>{% endcall %}
+<p>Shows five stars with the current average and the number of ratings. Each visitor can rate once.</p>
+
+<h2 id="spa">Single-page apps</h2>
+<p>The script finds widgets when the page loads. If your app adds them later, for example after a route change in React or Vue, ask it to look again:</p>
+{% call code("javascript") %}window.CountJar?.scan();{% endcall %}
+<p>Widgets that are already showing are left alone, so it's safe to call as often as you like. You can pass an element to only look inside it: <code>CountJar.scan(document.querySelector("#comments"))</code>.</p>
+
+<h2 id="badges">Badges</h2>
+<p>A badge is an SVG image that shows a counter's value. It suits places that allow images but not scripts, such as a GitHub README:</p>
+{% call code("markdown") %}![views]({{ site_url }}/badge/acme/repo-views.svg){% endcall %}
+<p>Or in HTML:</p>
+{% call code("html") %}<img src="{{ site_url }}/badge/acme/repo-views.svg?style=social&label=visitors" alt="Visitor count">{% endcall %}
+<p>Every time the image loads it counts a view, unless you add <code>readonly=1</code>. Badges are sent with headers that tell GitHub's image proxy not to cache them, so the number stays current.</p>
+<p>For like counters the badge shows the number of likes, polls show the percentage who said yes, and ratings show the average stars.</p>
+
+<h2 id="badge-options">Badge options</h2>
+{{ params([
+  ("style", "<code>flat</code> (default), <code>social</code> (like GitHub's buttons) or <code>big</code> (a larger number, for websites)."),
+  ("label", "Text on the left. Defaults to <code>views</code>, or <code>likes</code> for like counters. Up to 40 characters."),
+  ("color", "Colour of the value side: <code>amber</code> (default), <code>green</code>, <code>blue</code>, <code>red</code>, <code>violet</code>, <code>pink</code>, <code>slate</code>, <code>black</code>, or a hex code without the <code>#</code>, like <code>0ea5e9</code>."),
+  ("labelColor", "Colour of the label side, in the same formats."),
+  ("abbreviate", "<code>1</code> to shorten big numbers: 12.4k, 3.1M."),
+  ("readonly", "<code>1</code> to show the value without counting a view."),
+]) }}
+{% call code("markdown") %}![downloads]({{ site_url }}/badge/acme/downloads.svg?label=downloads&color=green&abbreviate=1&readonly=1){% endcall %}
+
+<h2 id="pixel">Tracking pixel</h2>
+<p>A 1×1 transparent GIF that counts one view each time it loads. Use it in emails, or anywhere you can add an image but don't want anything visible:</p>
+{% call code("html") %}<img src="{{ site_url }}/p/acme/newsletter-opens.gif?issue=42" width="1" height="1" alt="">{% endcall %}
+<p>Extra parameters like <code>issue</code> are saved with the event as <a href="/docs/api#props">custom properties</a>, so one counter can track every issue and you can filter by issue later.</p>
+{% call note() %}Many email apps load images through a proxy or block them until the reader allows it, so email open counts are always an estimate.{% endcall %}
+
+<h2 id="public-only">Public counters only</h2>
+<p>Widgets, badges and pixels never use a token, so they only work with <strong>public</strong> counters. A private or missing counter shows a dash in the widget and “not found” on a badge, and isn't counted.</p>
+<p>Counting is <a href="/docs/limits#rate">rate limited</a> per visitor, to stop one person running the number up. Over the limit, badges and pixels still load but the visit isn't counted.</p>
+{% endblock %}
