@@ -1,3 +1,4 @@
+import os
 import re
 
 from flask import Flask, abort, jsonify, redirect, render_template, request, url_for
@@ -5,7 +6,9 @@ from flask import Flask, abort, jsonify, redirect, render_template, request, url
 import db
 
 app = Flask(__name__)
-db.init()
+
+if os.environ.get("MONGODB_URI"):
+    db.init()
 
 SLUG = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 

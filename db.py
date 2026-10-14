@@ -1,80 +1,50 @@
-"""Tiny storage layer: Postgres when DATABASE_URL is set (production), SQLite otherwise (local dev)."""
+"""Storage layer backed by MongoDB Atlas (set MONGODB_URI)."""
 import os
-import sqlite3
+from datetime import datetime, timezone
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+from pymongo import ASCENDING, MongoClient, ReturnDocument
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS counters (
-    namespace  TEXT NOT NULL,
-    name       TEXT NOT NULL,
-    count      BIGINT NOT NULL DEFAULT 0,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (namespace, name)
-)
-"""
+_client = None
 
 
-def connect():
-    if DATABASE_URL:
-        import psycopg
-
-        return psycopg.connect(DATABASE_URL, autocommit=True)
-    # Vercel's filesystem is read-only except /tmp (which is wiped between instances).
-    default = "/tmp/countjar.db" if os.environ.get("VERCEL") else "countjar.db"
-    conn = sqlite3.connect(os.environ.get("SQLITE_PATH", default))
-    conn.isolation_level = None  # autocommit
-    return conn
-
-
-def execute(sql, params=()):
-    """Run one statement and return all rows. SQL uses %s placeholders."""
-    conn = connect()
-    try:
-        if not DATABASE_URL:
-            sql = sql.replace("%s", "?")
-        cur = conn.cursor()
-        cur.execute(sql, params)
-        return cur.fetchall() if cur.description else []
-    finally:
-        conn.close()
+def counters():
+    global _client
+    if _client is None:
+        uri = os.environ.get("MONGODB_URI")
+        if not uri:
+            raise RuntimeError("MONGODB_URI is not set")
+        # One client per process; serverless instances reuse it across requests.
+        _client = MongoClient(uri, appname="countjar", serverSelectionTimeoutMS=5000)
+    return _client[os.environ.get("MONGODB_DB", "countjar")].counters
 
 
 def init():
-    execute(SCHEMA)
+    counters().create_index([("namespace", ASCENDING), ("name", ASCENDING)], unique=True)
 
 
 def get(namespace, name):
-    rows = execute(
-        "SELECT count, created_at, updated_at FROM counters WHERE namespace = %s AND name = %s",
-        (namespace, name),
-    )
-    return rows[0] if rows else None
+    doc = counters().find_one({"namespace": namespace, "name": name})
+    return (doc["count"], doc["created_at"], doc["updated_at"]) if doc else None
 
 
 def add(namespace, name, delta):
-    rows = execute(
-        """
-        INSERT INTO counters (namespace, name, count) VALUES (%s, %s, %s)
-        ON CONFLICT (namespace, name)
-        DO UPDATE SET count = counters.count + excluded.count, updated_at = CURRENT_TIMESTAMP
-        RETURNING count
-        """,
-        (namespace, name, delta),
+    now = datetime.now(timezone.utc)
+    doc = counters().find_one_and_update(
+        {"namespace": namespace, "name": name},
+        {"$inc": {"count": delta}, "$set": {"updated_at": now}, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+        return_document=ReturnDocument.AFTER,
     )
-    return rows[0][0]
+    return doc["count"]
 
 
 def reset(namespace, name):
-    execute(
-        "UPDATE counters SET count = 0, updated_at = CURRENT_TIMESTAMP WHERE namespace = %s AND name = %s",
-        (namespace, name),
+    counters().update_one(
+        {"namespace": namespace, "name": name},
+        {"$set": {"count": 0, "updated_at": datetime.now(timezone.utc)}},
     )
 
 
 def list_namespace(namespace):
-    return execute(
-        "SELECT name, count, updated_at FROM counters WHERE namespace = %s ORDER BY name",
-        (namespace,),
-    )
+    cursor = counters().find({"namespace": namespace}).sort("name", ASCENDING)
+    return [(d["name"], d["count"], d["updated_at"].strftime("%Y-%m-%d %H:%M UTC")) for d in cursor]
