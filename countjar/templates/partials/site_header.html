@@ -1,0 +1,43 @@
+{% from "partials/icons.html" import icon, logo %}
+<header x-data="{ open: false, sol: false }" class="relative z-30">
+  <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
+    <a href="{{ url_for('site.landing') }}" class="flex items-center gap-2 text-lg font-bold tracking-tight text-ink">
+      {{ logo("size-8") }}<span>CountJar</span>
+    </a>
+    <nav class="hidden items-center gap-1 text-sm font-medium md:flex" aria-label="Main">
+      <div class="relative" @click.outside="sol = false">
+        <button type="button" class="btn btn-ghost" @click="sol = !sol" :aria-expanded="sol">Use cases {{ icon("chevron", "size-3.5") }}</button>
+        <div x-cloak x-show="sol" x-transition.origin.top.left
+             class="panel absolute left-0 top-full mt-2 w-72 p-2 shadow-xl">
+          {% for slug, h1 in solutions_nav %}
+          <a href="{{ url_for('site.solution', slug=slug) }}" class="block rounded-lg px-3 py-2 text-ink hover:bg-sunken">{{ h1 }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      <a href="/docs" class="btn btn-ghost">Docs</a>
+      <a href="{{ url_for('site.pricing') }}" class="btn btn-ghost">Pricing</a>
+    </nav>
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="cjTheme.toggle()" class="btn btn-ghost px-2.5" aria-label="Switch colour theme">
+        <span class="dark:hidden">{{ icon("moon") }}</span><span class="hidden dark:inline">{{ icon("sun") }}</span>
+      </button>
+      {% if current_user_obj %}
+      <a href="{{ url_for('web.home') }}" class="btn btn-ink hidden sm:inline-flex">Open dashboard</a>
+      {% else %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn-ghost hidden sm:inline-flex">Sign in</a>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-primary hidden sm:inline-flex">Start free</a>
+      {% endif %}
+      <button type="button" class="btn btn-ghost px-2.5 md:hidden" @click="open = !open" :aria-expanded="open" aria-label="Menu">
+        <span x-show="!open">{{ icon("menu") }}</span><span x-cloak x-show="open">{{ icon("x") }}</span>
+      </button>
+    </div>
+  </div>
+  <div x-cloak x-show="open" x-transition class="border-y border-line bg-surface px-4 py-3 md:hidden">
+    <a href="/docs" class="block rounded-lg px-3 py-2 font-medium">Docs</a>
+    <a href="{{ url_for('site.pricing') }}" class="block rounded-lg px-3 py-2 font-medium">Pricing</a>
+    {% for slug, h1 in solutions_nav %}
+    <a href="{{ url_for('site.solution', slug=slug) }}" class="block rounded-lg px-3 py-2 text-muted">{{ h1 }}</a>
+    {% endfor %}
+    <a href="{{ url_for('auth.login') }}" class="btn btn-primary mt-2 w-full">{{ "Open dashboard" if current_user_obj else "Start free" }}</a>
+  </div>
+</header>

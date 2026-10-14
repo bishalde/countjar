@@ -1,0 +1,368 @@
+{% extends "app/_layout.html" %}
+{% from "partials/icons.html" import icon, type_icon %}
+{% from "app/_macros.html" import type_chip, visibility_chip, copy_field, csrf, event_label %}
+{% set active = "counters" %}
+{% set base = site_url %}
+{% set api_url = base ~ "/api/v2/" ~ ws.slug ~ "/" ~ counter.name %}
+{% set primary_action = {"count": "up", "like": "like", "poll": "vote?choice=yes", "rating": "rate?value=5"}[counter.type] %}
+{% block title %}{{ counter.name }} · {{ ws.name }} · CountJar{% endblock %}
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js" defer></script>
+<script src="{{ url_for('embed.embed_js') }}" defer></script>
+{% endblock %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="text-sm text-muted">
+  <a href="{{ url_for('web.counter_list', ws_slug=ws.slug) }}" class="hover:text-ink">Counters</a> <span aria-hidden="true">/</span> <span class="text-ink">{{ counter.name }}</span>
+</nav>
+<div class="mt-2 flex flex-wrap items-start justify-between gap-4">
+  <div class="min-w-0">
+    <h1 class="flex items-center gap-3 truncate text-3xl font-bold"><span class="text-honey-text">{{ type_icon(counter.type, "size-7") }}</span>{{ counter.name }}</h1>
+    <div class="mt-2 flex flex-wrap items-center gap-2">{{ type_chip(counter.type) }} {{ visibility_chip(counter.visibility) }}
+      {% if counter.unique != "none" %}<span class="chip bg-sunken text-muted">{{ icon("users", "size-3") }} Unique {{ "daily" if counter.unique == "daily" else "once" }}</span>{% endif %}
+      {% if counter.min is not none or counter.max is not none %}<span class="chip bg-sunken text-muted">Range {{ counter.min if counter.min is not none else "−∞" }} to {{ counter.max if counter.max is not none else "∞" }}</span>{% endif %}
+    </div>
+    {% if counter.description %}<p class="mt-3 max-w-2xl text-muted">{{ counter.description }}</p>{% endif %}
+  </div>
+  <div class="w-full max-w-md">{{ copy_field(api_url ~ "/" ~ primary_action, "API URL") }}</div>
+</div>
+
+<!-- Tabs -->
+<div class="mt-8 flex gap-1 overflow-x-auto border-b border-line" role="tablist">
+  {% for t, label, ic in [("overview", "Overview", "chart"), ("embed", "Embed", "code"), ("milestones", "Milestones", "bell"), ("events", "Events", "zap"), ("settings", "Settings", "settings")] %}
+  <a href="{{ url_for('web.counter_detail', ws_slug=ws.slug, name=counter.name, tab=t) }}" role="tab" aria-selected="{{ 'true' if tab == t else 'false' }}"
+     class="-mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-2.5 text-sm font-medium {{ 'border-honey text-ink' if tab == t else 'border-transparent text-muted hover:text-ink' }}">
+    {{ icon(ic, "size-4") }}{{ label }}{% if t == "milestones" and milestones %}<span class="chip bg-sunken text-muted">{{ milestones | length }}</span>{% endif %}
+  </a>
+  {% endfor %}
+</div>
+
+{% if tab == "overview" %}
+<div class="mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+  <section class="panel p-6" {% if counter.type in ("count", "like") %}x-data="counterLive({{ counter.count }}, '{{ url_for('web.counter_action', ws_slug=ws.slug, name=counter.name) }}')"{% endif %}>
+    {% if counter.type == "poll" %}
+      <h2 class="text-sm text-muted">Votes</h2>
+      {% set total = data.yes + data.no %}
+      <div class="mt-4 space-y-4">
+        {% for label, n in [("Yes", data.yes), ("No", data.no)] %}
+        {% set pct = ((100 * n / total) | round | int) if total else 0 %}
+        <div>
+          <div class="flex justify-between text-sm"><span class="font-semibold">{{ label }}</span><span class="font-mono">{{ n | intcomma }} · {{ pct }}%</span></div>
+          <div class="mt-1.5 h-3 overflow-hidden rounded-full bg-sunken"><div class="h-full rounded-full {{ 'bg-honey' if label == 'Yes' else 'bg-ink/60' }}" style="width: {{ pct }}%"></div></div>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="mt-4 text-sm text-muted">{{ total | intcomma }} votes in total.</p>
+    {% elif counter.type == "rating" %}
+      <h2 class="text-sm text-muted">Average rating</h2>
+      <div class="mt-2 flex items-baseline gap-3"><span class="font-mono text-6xl font-semibold">{{ "%.2f" | format(data.average) }}</span><span class="text-2xl text-honey">★</span></div>
+      <p class="mt-2 text-sm text-muted">From {{ data.ratings | intcomma }} ratings.</p>
+    {% else %}
+      <h2 class="text-sm text-muted">Current value</h2>
+      <div x-ref="odo" class="odo mt-2 text-[clamp(3rem,8vw,5.5rem)] font-semibold" role="status" aria-live="polite"></div>
+      <div class="mt-6 flex flex-wrap items-center gap-2">
+        <button type="button" class="btn btn-outline" @click="act('down')" :disabled="busy">{{ icon("minus") }} Subtract</button>
+        <button type="button" class="btn btn-primary" @click="act('up')" :disabled="busy">{{ icon("plus") }} Add</button>
+        <label class="flex items-center gap-2 text-sm text-muted">by
+          <input type="number" min="1" x-model="by" placeholder="{{ counter.step }}" class="field w-20 py-2" aria-label="Step"></label>
+      </div>
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <input type="number" x-model="value" placeholder="Exact value" class="field w-36 py-2" aria-label="Exact value">
+        <button type="button" class="btn btn-outline btn-sm" @click="act('set')" :disabled="busy || value === ''">Set value</button>
+        <button type="button" class="btn btn-ghost btn-sm text-coral" @click="act('reset')" :disabled="busy">{{ icon("refresh", "size-3.5") }} Reset</button>
+      </div>
+    {% endif %}
+    {% if counter.type in ("poll", "rating") %}
+      <form method="post" action="{{ url_for('web.counter_action', ws_slug=ws.slug, name=counter.name) }}" class="mt-6" onsubmit="return confirm('Clear all votes? History is kept.')">
+        {{ csrf() }}<input type="hidden" name="action" value="reset">
+        <button class="btn btn-ghost btn-sm text-coral">{{ icon("refresh", "size-3.5") }} Clear results</button>
+      </form>
+    {% endif %}
+  </section>
+
+  <section class="panel p-6">
+    <h2 class="font-semibold">At a glance</h2>
+    <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-5 text-sm">
+      {% for label, value in [("Today", stats.today), ("Last 24 h", stats.last_24h), ("Last 7 days", stats.last_7d), ("Unique visitors, 24 h", stats.unique_24h), ("Unique visitors, 7 days", stats.unique_7d), ("All-time adds", stats.total_ups), ("All-time subtracts", stats.total_downs), ("Events, 24 h", stats.events_24h)] %}
+      <div><dt class="text-muted">{{ label }}</dt><dd class="mt-0.5 font-mono text-xl font-semibold">{{ value | intcomma }}</dd></div>
+      {% endfor %}
+    </dl>
+  </section>
+</div>
+
+<section class="panel mt-6 p-5" x-data="historyChart('{{ url_for('web.counter_history', ws_slug=ws.slug, name=counter.name) }}', '{{ 'count' if counter.type == 'count' else 'events' }}')">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <h2 class="font-semibold">History <span class="ml-2 font-mono text-sm font-normal text-muted" x-text="total.toLocaleString() + ' in range'"></span></h2>
+    <div class="flex items-center gap-2">
+      <div class="flex rounded-lg bg-sunken p-0.5 text-xs font-medium">
+        {% for r in ["24h", "7d", "30d"] %}
+        <button type="button" class="rounded-md px-2.5 py-1" :class="range === '{{ r }}' ? 'bg-surface shadow-sm' : 'text-muted'" @click="setRange('{{ r }}')">{{ r }}</button>
+        {% endfor %}
+      </div>
+      <a class="btn btn-outline btn-sm" :href="'{{ url_for('web.counter_export', ws_slug=ws.slug, name=counter.name, fmt='csv') }}?kind=history&range=' + range">{{ icon("download", "size-3.5") }} CSV</a>
+    </div>
+  </div>
+  <div class="mt-4 h-72"><canvas x-ref="canvas" role="img" aria-label="Counter history"></canvas></div>
+</section>
+
+<section class="panel mt-6 p-5">
+  <h2 class="font-semibold">Top referrers, last 7 days</h2>
+  {% if referrers %}
+  {% set top = referrers[0].n %}
+  <ul class="mt-4 space-y-3 text-sm">
+    {% for r in referrers %}
+    <li><div class="flex justify-between"><span>{{ r._id }}</span><span class="font-mono text-muted">{{ r.n | intcomma }}</span></div>
+      <div class="mt-1 h-1.5 rounded-full bg-sunken"><div class="h-full rounded-full bg-honey" style="width: {{ (100 * r.n / top) | round | int }}%"></div></div></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="mt-3 text-sm text-muted">No referrers yet. They appear when the widget, badge or API is called from a web page.</p>{% endif %}
+</section>
+
+{% elif tab == "embed" %}
+{% set cfg = {"ws": ws.slug, "name": counter.name, "type": counter.type, "base": base,
+  "defaults": {"theme": "light", "label": "", "icon": "eye", "readonly": False, "abbreviate": False, "accent": "#f2a90f",
+               "question": "", "badgeStyle": "flat", "badgeLabel": "", "badgeColor": "amber"}} %}
+<div class="mt-6" x-data="embedBuilder({{ cfg | tojson | forceescape }})">
+  {% if counter.visibility == "private" %}
+  <div class="mb-6 flex gap-3 rounded-xl border border-honey/40 bg-honey-soft p-4 text-sm">
+    <span class="text-honey-text">{{ icon("lock") }}</span>
+    <p>This counter is private, so widgets, badges and the pixel won't work without a token. Switch it to public in <a class="font-semibold underline" href="{{ url_for('web.counter_detail', ws_slug=ws.slug, name=counter.name, tab='settings') }}">Settings</a>, or call the API from your server with a token.</p>
+  </div>
+  {% endif %}
+  <div class="flex gap-1 rounded-xl bg-sunken p-1 text-sm font-medium sm:w-fit">
+    {% for t, label in [("widget", "Widget"), ("badge", "Badge"), ("api", "API"), ("pixel", "Pixel")] %}
+    <button type="button" class="flex-1 rounded-lg px-4 py-2" :class="tab === '{{ t }}' ? 'bg-surface shadow-sm' : 'text-muted hover:text-ink'" @click="tab = '{{ t }}'">{{ label }}</button>
+    {% endfor %}
+  </div>
+
+  <!-- Widget -->
+  <div x-show="tab === 'widget'" class="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+    <div class="panel space-y-5 p-5">
+      <div>
+        <span class="label">Theme</span>
+        <div class="flex gap-2">{% for th in ["light", "dark", "glass"] %}
+          <button type="button" class="btn btn-sm flex-1 border" :class="theme === '{{ th }}' ? 'border-honey bg-honey-soft' : 'border-line'" @click="theme = '{{ th }}'">{{ th | capitalize }}</button>{% endfor %}
+        </div>
+      </div>
+      <div><label class="label" for="e-label">Label</label><input id="e-label" x-model="label" class="field" placeholder="{{ 'views' if counter.type == 'count' else 'likes' if counter.type == 'like' else '' }}"></div>
+      {% if counter.type == "count" %}
+      <div>
+        <span class="label">Icon</span>
+        <div class="flex flex-wrap gap-2">{% for ic in ["eye", "heart", "star", "fire", "download", "users", "bolt"] %}
+          <button type="button" class="btn btn-sm border font-mono" :class="icon === '{{ ic }}' ? 'border-honey bg-honey-soft' : 'border-line'" @click="icon = '{{ ic }}'">{{ ic }}</button>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% if counter.type == "poll" %}
+      <div><label class="label" for="e-q">Question</label><input id="e-q" x-model="question" class="field" placeholder="Was this helpful?"></div>
+      {% endif %}
+      <div>
+        <span class="label">Accent colour</span>
+        <div class="flex gap-2">{% for c in ["#f2a90f", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6", "#ec4899"] %}
+          <button type="button" class="size-8 rounded-full ring-offset-2 ring-offset-surface" style="background: {{ c }}" :class="accent === '{{ c }}' && 'ring-2 ring-ink'" @click="accent = '{{ c }}'" aria-label="Accent {{ c }}"></button>{% endfor %}
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" x-model="abbreviate" class="accent-[var(--honey)]"> Abbreviate (12.4k)</label>
+        {% if counter.type == "count" %}<label class="flex items-center gap-2"><input type="checkbox" x-model="readonly" class="accent-[var(--honey)]"> Display only, don't count</label>{% endif %}
+      </div>
+    </div>
+    <div class="space-y-4">
+      <div class="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-line p-6"
+           :class="theme === 'glass' ? 'bg-gradient-to-br from-violet-500 to-amber-400 text-white' : (theme === 'dark' ? 'bg-[#0f1226]' : 'bg-bg')">
+        <div x-ref="preview"></div>
+      </div>
+      <p class="text-xs text-muted">The preview reads the counter without changing it.</p>
+      <div class="relative"><pre class="code-block pr-20 text-xs" x-text="snippet"></pre>
+        <button type="button" class="btn btn-primary btn-sm absolute right-3 top-3" @click="cjCopy(snippet, 'Snippet')">{{ icon("copy", "size-3.5") }} Copy</button></div>
+    </div>
+  </div>
+
+  <!-- Badge -->
+  <div x-cloak x-show="tab === 'badge'" class="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+    <div class="panel space-y-5 p-5">
+      <div><span class="label">Style</span>
+        <div class="flex gap-2">{% for st in ["flat", "social", "big"] %}
+          <button type="button" class="btn btn-sm flex-1 border" :class="badgeStyle === '{{ st }}' ? 'border-honey bg-honey-soft' : 'border-line'" @click="badgeStyle = '{{ st }}'">{{ st | capitalize }}</button>{% endfor %}</div></div>
+      <div><label class="label" for="b-label">Label</label><input id="b-label" x-model="badgeLabel" class="field" placeholder="views"></div>
+      <div><span class="label">Colour</span>
+        <div class="flex flex-wrap gap-2">{% for name, hex in [("amber", "#f59e0b"), ("green", "#10b981"), ("blue", "#3b82f6"), ("red", "#ef4444"), ("violet", "#8b5cf6"), ("pink", "#ec4899"), ("slate", "#64748b")] %}
+          <button type="button" class="size-8 rounded-full ring-offset-2 ring-offset-surface" style="background: {{ hex }}" :class="badgeColor === '{{ name }}' && 'ring-2 ring-ink'" @click="badgeColor = '{{ name }}'" aria-label="{{ name }}"></button>{% endfor %}</div></div>
+      <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+        <label class="flex items-center gap-2"><input type="checkbox" x-model="abbreviate" class="accent-[var(--honey)]"> Abbreviate</label>
+        <label class="flex items-center gap-2"><input type="checkbox" x-model="readonly" class="accent-[var(--honey)]"> Display only</label>
+      </div>
+    </div>
+    <div class="space-y-4">
+      <div class="flex min-h-32 items-center justify-center rounded-2xl border border-dashed border-line bg-bg p-6"><img :src="previewBadgeUrl" alt="Badge preview"></div>
+      <div><span class="label">Markdown (GitHub, GitLab, Notion)</span>
+        <div class="relative"><pre class="code-block pr-20 text-xs" x-text="markdown"></pre><button type="button" class="btn btn-primary btn-sm absolute right-3 top-3" @click="cjCopy(markdown, 'Markdown')">Copy</button></div></div>
+      <div><span class="label">Image URL</span>
+        <div class="relative"><pre class="code-block pr-20 text-xs" x-text="badgeUrl"></pre><button type="button" class="btn btn-primary btn-sm absolute right-3 top-3" @click="cjCopy(badgeUrl, 'Badge URL')">Copy</button></div></div>
+    </div>
+  </div>
+
+  <!-- API -->
+  <div x-cloak x-show="tab === 'api'" class="mt-6 grid gap-6 lg:grid-cols-2">
+    <div class="space-y-4">
+      {% set samples = [("Read", api_url), ("Primary action", api_url ~ "/" ~ primary_action), ("Stats", api_url ~ "/stats"), ("History, 7 days", api_url ~ "/history?range=7d")] %}
+      {% if counter.type == "count" %}{% set samples = samples + [("Count within a window", api_url ~ "?window=24h")] %}{% endif %}
+      {% for label, url in samples %}
+      <div><span class="label">{{ label }}</span>{{ copy_field(url, label) }}</div>
+      {% endfor %}
+    </div>
+    <div>
+      <span class="label">From your server</span>
+<pre class="code-block text-xs"><code>curl -X POST "{{ api_url }}/{{ primary_action }}" \
+  -H "Authorization: Bearer $COUNTJAR_TOKEN"</code></pre>
+<pre class="code-block mt-3 text-xs"><code>// Node 18+ / browser
+const res = await fetch("{{ api_url }}/{{ primary_action }}", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${process.env.COUNTJAR_TOKEN}` },
+});
+console.log((await res.json()).count);</code></pre>
+      <p class="mt-3 text-sm text-muted">{% if counter.visibility == "public" %}Public counters accept reads and {{ primary_action.split('?')[0] }} without a token. Subtract, set and reset always need a token with write permission.{% else %}This private counter needs a token for every request.{% endif %}
+        <a class="font-semibold text-honey-text" href="{{ url_for('web.token_list', ws_slug=ws.slug) }}">Create a token</a></p>
+    </div>
+  </div>
+
+  <!-- Pixel -->
+  <div x-cloak x-show="tab === 'pixel'" class="mt-6 max-w-3xl">
+    <p class="text-muted">An invisible 1×1 image that counts a hit when it loads. Use it in emails, on thank-you pages, or anywhere JavaScript can't run. Any extra query parameters, like <code class="text-ink">campaign</code> or <code class="text-ink">ref</code>, are saved with the event and show up in the Events tab and exports.</p>
+    <div class="relative mt-4"><pre class="code-block pr-20 text-xs" x-text="pixel"></pre><button type="button" class="btn btn-primary btn-sm absolute right-3 top-3" @click="cjCopy(pixel, 'Pixel')">Copy</button></div>
+  </div>
+</div>
+
+{% elif tab == "milestones" %}
+<div class="mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+  <section class="panel">
+    <h2 class="border-b border-line px-5 py-4 font-semibold">Alerts</h2>
+    {% if milestones %}
+    <ul class="divide-y divide-line">
+      {% for m in milestones %}
+      <li class="flex flex-wrap items-center gap-3 px-5 py-4">
+        <span class="font-mono text-lg font-semibold">{{ m.threshold | intcomma }}</span>
+        <span class="chip bg-sunken text-muted">{{ icon("phone" if m.channel == "sms" else "zap", "size-3") }} {{ "SMS" if m.channel == "sms" else "Webhook" }}</span>
+        <span class="min-w-0 flex-1 truncate font-mono text-xs text-muted" title="{{ m.target }}">{{ m.target }}</span>
+        {% if m.last_error %}<span class="chip bg-coral/12 text-coral" title="{{ m.last_error }}">Failed</span>
+        {% elif m.fired_at %}<span class="chip bg-mint/12 text-mint">Reached {{ m.fired_at | timeago }}</span>
+        {% else %}<span class="chip bg-honey-soft text-honey-text">Waiting</span>{% endif %}
+        <div class="flex gap-1">
+          {% if m.fired_at %}
+          <form method="post" action="{{ url_for('web.milestone_op', ws_slug=ws.slug, name=counter.name, mid=m._id, op='rearm') }}">{{ csrf() }}<button class="btn btn-ghost btn-sm">Re-arm</button></form>
+          {% endif %}
+          <form method="post" action="{{ url_for('web.milestone_op', ws_slug=ws.slug, name=counter.name, mid=m._id, op='delete') }}">{{ csrf() }}<button class="btn btn-ghost btn-sm text-coral" aria-label="Delete milestone">{{ icon("trash", "size-3.5") }}</button></form>
+        </div>
+        {% if m.channel == "webhook" %}
+        <details class="w-full text-xs text-muted"><summary class="cursor-pointer">Signing secret</summary>
+          <div class="mt-2">{{ copy_field(m.secret, "Secret") }}</div>
+          <p class="mt-2">Each request carries <code>X-CountJar-Signature: sha256=&lt;HMAC of the body&gt;</code>. Check it before trusting the payload.</p>
+        </details>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="px-5 py-8 text-sm text-muted">No alerts yet. Add one to hear about it the moment this counter passes a number.</p>
+    {% endif %}
+  </section>
+
+  <form method="post" action="{{ url_for('web.milestone_add', ws_slug=ws.slug, name=counter.name) }}" class="panel space-y-4 p-5" x-data="{ channel: 'webhook' }">
+    {{ csrf() }}
+    <h2 class="font-semibold">Add an alert</h2>
+    <div><label class="label" for="m-threshold">When the count reaches</label>
+      <input id="m-threshold" name="threshold" type="number" required class="field font-mono" placeholder="{{ [((counter.count // 100) + 1) * 100, 100] | max }}"></div>
+    <div><span class="label">Notify by</span>
+      <div class="flex rounded-xl border border-line p-1 text-sm">
+        <label class="flex-1"><input type="radio" name="channel" value="webhook" x-model="channel" class="peer sr-only"><span class="block cursor-pointer rounded-lg py-1.5 text-center peer-checked:bg-honey peer-checked:font-semibold peer-checked:text-[#1a1d3a]">Webhook</span></label>
+        <label class="flex-1"><input type="radio" name="channel" value="sms" x-model="channel" class="peer sr-only"><span class="block cursor-pointer rounded-lg py-1.5 text-center peer-checked:bg-honey peer-checked:font-semibold peer-checked:text-[#1a1d3a]">Text message</span></label>
+      </div></div>
+    <div x-show="channel === 'webhook'"><label class="label" for="m-url">Webhook URL</label>
+      <input id="m-url" name="target" type="url" class="field font-mono" placeholder="https://example.com/hooks/countjar" :disabled="channel !== 'webhook'" :required="channel === 'webhook'">
+      <p class="hint">Must be https. We send a signed JSON POST once, the first time the count reaches the number.</p></div>
+    <div x-cloak x-show="channel === 'sms'"><label class="label" for="m-phone">Send to</label>
+      <input type="hidden" name="target" value="{{ user.phone }}" :disabled="channel !== 'sms'">
+      <p id="m-phone" class="field font-mono text-muted">{{ user.phone }}</p>
+      <p class="hint">Texts go to the number you signed in with, at most 5 a day.</p></div>
+    <button class="btn btn-primary w-full">Add alert</button>
+  </form>
+</div>
+
+{% elif tab == "events" %}
+<div class="mt-6 flex flex-wrap items-end justify-between gap-3">
+  <form method="get" class="flex gap-2">
+    <input type="hidden" name="tab" value="events">
+    <input name="filter" value="{{ prop_filter }}" class="field w-64 font-mono" placeholder="campaign=spring" aria-label="Filter by property">
+    <button class="btn btn-outline">Filter</button>
+    {% if prop_filter %}<a href="?tab=events" class="btn btn-ghost">Clear</a>{% endif %}
+  </form>
+  <div class="flex gap-2">
+    <a class="btn btn-outline btn-sm" href="{{ url_for('web.counter_export', ws_slug=ws.slug, name=counter.name, fmt='csv', filter=prop_filter or None) }}">{{ icon("download", "size-3.5") }} CSV</a>
+    <a class="btn btn-outline btn-sm" href="{{ url_for('web.counter_export', ws_slug=ws.slug, name=counter.name, fmt='json', filter=prop_filter or None) }}">{{ icon("download", "size-3.5") }} JSON</a>
+  </div>
+</div>
+<div class="panel mt-4 overflow-x-auto">
+  {% if events %}
+  <table class="w-full text-sm">
+    <thead class="border-b border-line bg-sunken/60 text-left text-xs text-muted">
+      <tr><th class="px-4 py-3 font-medium">When</th><th class="px-4 py-3 font-medium">Action</th><th class="px-4 py-3 font-medium">Change</th>
+          <th class="px-4 py-3 font-medium">Visitor</th><th class="px-4 py-3 font-medium">Referrer</th><th class="px-4 py-3 font-medium">Properties</th></tr>
+    </thead>
+    <tbody class="divide-y divide-line">
+      {% for e in events %}
+      <tr>
+        <td class="whitespace-nowrap px-4 py-3 text-muted" title="{{ e.ts }}">{{ e.ts[:19] | replace("T", " ") }}</td>
+        <td class="whitespace-nowrap px-4 py-3 font-medium">{{ event_label(e) }}</td>
+        <td class="px-4 py-3 font-mono {{ 'text-mint' if (e.delta or 0) > 0 else 'text-coral' if (e.delta or 0) < 0 else 'text-muted' }}">{{ "%+d" | format(e.delta) if e.delta else (e.value if e.value is not none else "·") }}</td>
+        <td class="px-4 py-3 font-mono text-xs text-muted">{{ e.visitor or "dashboard" }}</td>
+        <td class="px-4 py-3 text-muted">{{ e.referrer or "" }}</td>
+        <td class="px-4 py-3">{% for k, v in e.props.items() %}<a href="?tab=events&filter={{ k }}={{ v | urlencode }}" class="chip mr-1 bg-sunken font-mono text-[11px] text-muted hover:text-ink">{{ k }}={{ v }}</a>{% endfor %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="p-8 text-center text-sm text-muted">{{ "No events match that filter." if prop_filter else "No events yet." }}</p>
+  {% endif %}
+</div>
+<p class="mt-3 text-xs text-muted">Showing the latest 50. Exports include up to 5,000. Raw events are kept for 90 days; charts keep hourly totals for longer.</p>
+
+{% elif tab == "settings" %}
+<div class="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+  <form method="post" action="{{ url_for('web.counter_settings', ws_slug=ws.slug, name=counter.name) }}" class="panel space-y-5 p-6">
+    {{ csrf() }}
+    <h2 class="font-semibold">Counter settings</h2>
+    <div><label class="label" for="s-desc">Description</label><input id="s-desc" name="description" class="field" maxlength="200" value="{{ counter.description }}"></div>
+    <div><span class="label">Access</span>
+      <div class="space-y-2 text-sm">
+        <label class="flex gap-3 rounded-xl border border-line p-3 has-checked:border-honey has-checked:bg-honey-soft"><input type="radio" name="visibility" value="public" {% if counter.visibility == "public" %}checked{% endif %} class="mt-1 accent-[var(--honey)]">
+          <span><span class="font-semibold">Public</span><span class="block text-muted">Anyone can read it and add to it. Widgets, badges and the pixel work.</span></span></label>
+        <label class="flex gap-3 rounded-xl border border-line p-3 has-checked:border-honey has-checked:bg-honey-soft"><input type="radio" name="visibility" value="private" {% if counter.visibility == "private" %}checked{% endif %} class="mt-1 accent-[var(--honey)]">
+          <span><span class="font-semibold">Private</span><span class="block text-muted">Every request needs a workspace token.</span></span></label>
+      </div></div>
+    {% if counter.type in ("count", "like") %}
+    <div class="grid gap-4 sm:grid-cols-3">
+      <div><label class="label" for="s-step">Step</label><input id="s-step" name="step" type="number" min="1" class="field" value="{{ counter.step }}"></div>
+      <div><label class="label" for="s-min">Minimum</label><input id="s-min" name="min" type="number" class="field" value="{{ counter.min if counter.min is not none else '' }}" placeholder="None"></div>
+      <div><label class="label" for="s-max">Maximum</label><input id="s-max" name="max" type="number" class="field" value="{{ counter.max if counter.max is not none else '' }}" placeholder="None"></div>
+    </div>
+    {% endif %}
+    {% if counter.type == "count" %}
+    <div><label class="label" for="s-unique">Count each visitor</label>
+      <select id="s-unique" name="unique" class="field">
+        {% for v, l in [("none", "Every time (all hits)"), ("daily", "Once per day"), ("once", "Only once, ever")] %}<option value="{{ v }}" {% if counter.unique == v %}selected{% endif %}>{{ l }}</option>{% endfor %}
+      </select></div>
+    {% endif %}
+    <button class="btn btn-primary">Save settings</button>
+  </form>
+
+  <form method="post" action="{{ url_for('web.counter_delete', ws_slug=ws.slug, name=counter.name) }}" class="h-fit rounded-2xl border border-coral/40 p-6" x-data="{ typed: '' }">
+    {{ csrf() }}
+    <h2 class="font-semibold text-coral">Delete this counter</h2>
+    <p class="mt-2 text-sm text-muted">Deletes the counter, its history, events and alerts. Embeds and API calls stop working. This frees one counter slot.</p>
+    <label class="label mt-4" for="confirm">Type <code class="font-mono">{{ counter.name }}</code> to confirm</label>
+    <input id="confirm" name="confirm" class="field font-mono" x-model="typed" autocomplete="off">
+    <button class="btn btn-danger mt-4 w-full" :disabled="typed !== {{ counter.name | tojson | forceescape }}">Delete counter</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

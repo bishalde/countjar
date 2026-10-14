@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+@source "../countjar/templates";
+@source "../countjar/static/app.js";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Semantic tokens. Light = glass jar on a bright desk; dark = the same jar at night. */
+:root {
+  --bg: #eef2f8;
+  --surface: #ffffff;
+  --sunken: #e3e8f2;
+  --line: #d4dbe8;
+  --text: #1a1d3a;
+  --muted: #5b6285;
+  --honey: #f2a90f;
+  --honey-text: #a35f00;
+  --honey-soft: #fdf1d6;
+  --mint: #1f9d72;
+  --coral: #d9434a;
+  --code-bg: #1a1d3a;
+  --code-text: #e8eaf6;
+}
+.dark {
+  --bg: #0f1226;
+  --surface: #171b36;
+  --sunken: #12152c;
+  --line: #2a2f55;
+  --text: #e8eaf6;
+  --muted: #9aa0c3;
+  --honey: #f5b52e;
+  --honey-text: #f5b52e;
+  --honey-soft: #2d2a2a;
+  --mint: #3cc994;
+  --coral: #f06a6f;
+  --code-bg: #0a0c1d;
+  --code-text: #e8eaf6;
+}
+
+@theme inline {
+  --font-sans: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-line: var(--line);
+  --color-ink: var(--text);
+  --color-muted: var(--muted);
+  --color-honey: var(--honey);
+  --color-honey-text: var(--honey-text);
+  --color-honey-soft: var(--honey-soft);
+  --color-mint: var(--mint);
+  --color-coral: var(--coral);
+  --color-code: var(--code-bg);
+  --color-code-ink: var(--code-text);
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  /* Grid items default to min-width:auto, so one long code line could widen the whole page. */
+  .grid > * { min-width: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--honey); color: #1a1d3a; }
+  :focus-visible { outline: 2px solid var(--honey); outline-offset: 2px; border-radius: 6px; }
+  [x-cloak] { display: none !important; }
+  code, pre, kbd { font-family: var(--font-mono); }
+  h1, h2, h3 { text-wrap: balance; letter-spacing: -0.02em; }
+  p { text-wrap: pretty; }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold
+      transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap;
+  }
+  .btn-primary { @apply bg-honey text-[#1a1d3a] hover:brightness-105 active:brightness-95; }
+  .btn-ink { @apply bg-ink text-bg hover:opacity-90; }
+  .btn-ghost { @apply text-ink hover:bg-sunken; }
+  .btn-outline { @apply border border-line bg-surface text-ink hover:bg-sunken; }
+  .btn-danger { @apply bg-coral text-white hover:brightness-110; }
+  .btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
+
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-ink
+      placeholder:text-muted/70 outline-none transition
+      focus:border-honey focus:ring-4 focus:ring-honey/20;
+  }
+  .label { @apply mb-1.5 block text-sm font-medium text-ink; }
+  .hint { @apply mt-1.5 text-xs text-muted; }
+
+  .panel { @apply rounded-2xl border border-line bg-surface; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+
+  .code-block {
+    @apply overflow-x-auto rounded-xl bg-code p-4 text-[13px] leading-relaxed text-code-ink;
+  }
+  .prose-tight a { @apply text-honey-text underline decoration-honey/40 underline-offset-2 hover:decoration-honey; }
+
+  /* The odometer: each digit is a vertical strip of 0-9 that slides into place. */
+  .odo { display: inline-flex; font-family: var(--font-mono); font-variant-numeric: tabular-nums; line-height: 1; }
+  .odo-digit { display: inline-block; height: 1em; overflow: hidden; }
+  .odo-strip { display: flex; flex-direction: column; transition: transform .7s cubic-bezier(.2, .9, .25, 1.15); }
+  .odo-strip span { height: 1em; display: block; text-align: center; }
+  .odo-sep { display: inline-block; height: 1em; line-height: 1; font-family: var(--font-sans); margin-inline: .02em; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .odo-strip { transition: none; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

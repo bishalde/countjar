@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "partials/icons.html" import icon %}
+{% block title %}Pricing · CountJar counter API{% endblock %}
+{% block description %}CountJar is free: 5 counters, 10,000 counts a day, 3 workspaces, widgets, badges, analytics and milestone alerts included.{% endblock %}
+{% block body %}
+{% include "partials/site_header.html" %}
+<main id="main" class="mx-auto max-w-4xl px-4 py-12 sm:px-6">
+  <h1 class="text-5xl font-extrabold tracking-[-0.03em]">One plan, and it's free</h1>
+  <p class="mt-4 max-w-xl text-lg text-muted">Everything CountJar does is included. The only limits are how many counters you keep and how much you count each day.</p>
+  <div class="panel mt-10 grid gap-10 p-8 md:grid-cols-[1fr_1.2fr]">
+    <div>
+      <div class="font-mono text-6xl font-semibold">$0</div>
+      <p class="mt-2 text-muted">per month, no card needed</p>
+      <a href="{{ url_for('auth.login') }}" class="btn btn-primary mt-8 w-full py-3 text-base">Create a free account</a>
+    </div>
+    <ul class="space-y-3 text-sm">
+      {% for item in ["5 counters across all your workspaces", "10,000 counted hits a day (resets 00:00 UTC)", "Up to 3 workspaces with teammates", "600 API requests a minute per path", "Public and private counters, scoped API tokens", "View, like, poll and rating widgets", "SVG badges and a tracking pixel", "24 h, 7 day and 30 day history with CSV and JSON export", "Webhook and SMS milestone alerts", "90 days of raw event history"] %}
+      <li class="flex gap-3"><span class="text-mint">{{ icon("check") }}</span>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  <p class="mt-6 text-sm text-muted">Need more counters? Delete one you no longer use to free up a slot, or get in touch on GitHub.</p>
+</main>
+{% include "partials/site_footer.html" %}
+{% endblock %}

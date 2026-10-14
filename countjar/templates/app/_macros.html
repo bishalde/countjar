@@ -1,0 +1,52 @@
+{% from "partials/icons.html" import icon, type_icon %}
+
+{% macro meter(label, used, limit, help="") -%}
+{% set pct = [100, (100 * used / limit) | round | int if limit else 0] | min %}
+<div>
+  <div class="flex items-baseline justify-between text-xs">
+    <span class="font-medium text-ink">{{ label }}</span>
+    <span class="font-mono text-muted">{{ used | intcomma }} / {{ limit | intcomma }}</span>
+  </div>
+  <div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-sunken" role="progressbar" aria-label="{{ label }}" aria-valuenow="{{ used }}" aria-valuemax="{{ limit }}">
+    <div class="h-full rounded-full {{ 'bg-coral' if pct >= 100 else 'bg-honey' }}" style="width: {{ pct }}%"></div>
+  </div>
+  {% if help %}<p class="mt-1 text-[11px] text-muted">{{ help }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro type_chip(t) -%}
+<span class="chip bg-sunken text-muted">{{ type_icon(t, "size-3") }} {{ {"count": "Counter", "like": "Like button", "poll": "Poll", "rating": "Rating"}[t] }}</span>
+{%- endmacro %}
+
+{% macro visibility_chip(v) -%}
+{% if v == "private" %}<span class="chip bg-ink/8 text-ink">{{ icon("lock", "size-3") }} Private</span>
+{% else %}<span class="chip bg-mint/12 text-mint">{{ icon("globe", "size-3") }} Public</span>{% endif %}
+{%- endmacro %}
+
+{% macro display_value(c) -%}
+{% if c.type == "poll" %}{% set total = c.yes + c.no %}{{ ((100 * c.yes / total) | round | int) if total else 0 }}% yes
+{%- elif c.type == "rating" %}{{ "%.1f" | format(c.rating_sum / c.rating_count if c.rating_count else 0) }} ★
+{%- else %}{{ c.count | intcomma }}{% endif %}
+{%- endmacro %}
+
+{% macro copy_field(value, label="Copied", mono=True) -%}
+<div class="flex items-stretch overflow-hidden rounded-xl border border-line bg-sunken">
+  <code class="min-w-0 flex-1 overflow-x-auto whitespace-nowrap px-3 py-2.5 text-[13px] {{ 'font-mono' if mono }}">{{ value }}</code>
+  <button type="button" class="flex items-center gap-1.5 border-l border-line px-3 text-xs font-semibold text-muted hover:bg-surface hover:text-ink"
+          @click="cjCopy({{ value | tojson | forceescape }}, {{ label | tojson | forceescape }})">{{ icon("copy", "size-3.5") }} Copy</button>
+</div>
+{%- endmacro %}
+
+{% macro csrf() %}<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">{% endmacro %}
+
+{% macro event_label(e) -%}
+{%- set d = e.delta or 0 -%}
+{%- if e.action == "up" %}{{ "added %d" % d if d else "hit the max" }}
+{%- elif e.action == "down" %}{{ "subtracted %d" % -d if d else "hit the min" }}
+{%- elif e.action == "set" %}set to {{ e.value | intcomma }}
+{%- elif e.action == "reset" %}reset to {{ e.value or 0 }}
+{%- elif e.action == "like" %}liked
+{%- elif e.action == "vote" %}voted {{ "yes" if e.value == 1 else "no" }}
+{%- elif e.action == "rate" %}rated {{ e.value }}★
+{%- else %}{{ e.action }}{% endif -%}
+{%- endmacro %}

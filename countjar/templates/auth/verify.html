@@ -1,0 +1,32 @@
+{% extends "auth/_layout.html" %}
+{% block title %}Enter your code · CountJar{% endblock %}
+{% block form %}
+<h1 class="text-3xl font-bold">Check your phone</h1>
+<p class="mt-2 text-muted">We texted a 6-digit code to <span class="font-semibold text-ink">{{ phone }}</span>.</p>
+<form method="post" class="mt-8" x-data="otp" x-ref="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="code" :value="code">
+  <fieldset>
+    <legend class="label">Verification code</legend>
+    <div class="flex justify-between gap-2" @paste.prevent="paste($event)">
+      {% for i in range(6) %}
+      <input x-ref="d{{ i }}" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+             {% if i == 0 %}autocomplete="one-time-code" autofocus{% else %}autocomplete="off"{% endif %}
+             aria-label="Digit {{ i + 1 }}" x-model="digits[{{ i }}]"
+             @input="input({{ i }}, $event)" @keydown.backspace="back({{ i }}, $event)"
+             class="field h-14 w-12 px-0 text-center font-mono text-2xl font-semibold sm:w-13">
+      {% endfor %}
+    </div>
+  </fieldset>
+  <button class="btn btn-primary mt-6 w-full py-3 text-base" :disabled="code.length < 6">Verify and continue</button>
+</form>
+<div class="mt-6 flex items-center justify-between text-sm" x-data="countdown(30)">
+  <a href="{{ url_for('auth.login') }}" class="text-muted hover:text-ink">Use a different number</a>
+  <form method="post" action="{{ url_for('auth.resend') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="font-semibold text-honey-text disabled:text-muted" :disabled="left > 0">
+      <span x-show="left > 0">Resend in <span x-text="left"></span>s</span><span x-cloak x-show="left <= 0">Resend code</span>
+    </button>
+  </form>
+</div>
+{% endblock %}

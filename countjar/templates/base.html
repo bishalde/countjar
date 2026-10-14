@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}CountJar · Counter API, hit counters and widgets{% endblock %}</title>
+  <meta name="description" content="{% block description %}Hosted counters with one URL each. Count page views, clicks, likes, votes and ratings with a REST API, embeddable widgets and SVG badges.{% endblock %}">
+  {%- set page_title = self.title() | trim %}
+  {%- set page_description = self.description() | trim %}
+  <meta name="robots" content="{% block robots %}index, follow{% endblock %}">
+  <link rel="canonical" href="{{ site_url }}{{ request.path if request.path != '/' else '/' }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="CountJar">
+  <meta property="og:title" content="{{ page_title }}">
+  <meta property="og:description" content="{{ page_description }}">
+  <meta property="og:url" content="{{ site_url }}{{ request.path }}">
+  <meta property="og:image" content="{{ site_url }}{{ url_for('static', filename='og.png') }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ page_title }}">
+  <meta name="twitter:description" content="{{ page_description }}">
+  <meta name="twitter:image" content="{{ site_url }}{{ url_for('static', filename='og.png') }}">
+  {%- if google_verification %}<meta name="google-site-verification" content="{{ google_verification }}">{% endif %}
+  {%- if bing_verification %}<meta name="msvalidate.01" content="{{ bing_verification }}">{% endif %}
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <meta name="theme-color" content="#1a1d3a">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=JetBrains+Mono:wght@400;600&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ asset_version }}">
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("cj-theme"); } catch (e) {}
+      if (t === "dark" || (!t && matchMedia("(prefers-color-scheme: dark)").matches))
+        document.documentElement.classList.add("dark");
+    })();
+  </script>
+  {% block jsonld %}{% endblock %}
+  <script src="{{ url_for('static', filename='app.js') }}?v={{ asset_version }}" defer></script>
+  {% block head %}{% endblock %}
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+</head>
+<body class="min-h-dvh {% block body_class %}{% endblock %}">
+  <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 btn btn-primary">Skip to content</a>
+  {% block body %}{% endblock %}
+  {% include "partials/toasts.html" %}
+</body>
+</html>

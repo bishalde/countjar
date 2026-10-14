@@ -1,0 +1,11 @@
+<div x-data="toasts" @cj-toast.window="add($event)" x-init="{% for kind, msg in get_flashed_messages(with_categories=true) %}add({detail: {message: {{ msg|tojson|forceescape }}, kind: {{ kind|tojson|forceescape }}}});{% endfor %}"
+     class="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4 sm:items-end sm:pr-6" aria-live="polite">
+  <template x-for="t in items" :key="t.id">
+    <div x-transition.opacity.duration.200ms
+         class="pointer-events-auto flex max-w-sm items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-lg"
+         :class="t.kind === 'error' ? 'border-coral/40 bg-surface text-ink' : 'border-line bg-ink text-bg'">
+      <span class="mt-0.5 size-2 shrink-0 rounded-full" :class="t.kind === 'error' ? 'bg-coral' : 'bg-honey'"></span>
+      <span x-text="t.message"></span>
+    </div>
+  </template>
+</div>

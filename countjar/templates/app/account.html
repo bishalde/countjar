@@ -1,0 +1,28 @@
+{% extends "app/_layout.html" %}
+{% from "app/_macros.html" import csrf, meter %}
+{% set active = "account" %}
+{% block title %}Your account · CountJar{% endblock %}
+{% block content %}
+<h1 class="text-3xl font-bold">Your account</h1>
+<div class="mt-6 grid max-w-3xl gap-6">
+  <form method="post" class="panel space-y-4 p-6">
+    {{ csrf() }}
+    <div><label class="label" for="a-name">Name</label><input id="a-name" name="name" class="field" value="{{ user.name }}" maxlength="60" required></div>
+    <div><span class="label">Phone number</span><p class="font-mono">{{ user.phone }}</p><p class="hint">Verified with Twilio. It's how you sign in.</p></div>
+    <button class="btn btn-primary">Save</button>
+  </form>
+  <section class="panel space-y-4 p-6">
+    <h2 class="font-semibold">Your plan</h2>
+    {{ meter("Counters", budget.used, budget.limit, "Counted across every workspace you own") }}
+    {{ meter("Counts today", usage.used, usage.limit, "Resets at 00:00 UTC") }}
+  </section>
+  <form method="post" action="{{ url_for('web.account_delete') }}" class="rounded-2xl border border-coral/40 p-6" x-data="{ typed: '' }">
+    {{ csrf() }}
+    <h2 class="font-semibold text-coral">Delete account</h2>
+    <p class="mt-2 text-sm text-muted">Deletes your account and every workspace you own, with all their counters. You'll be removed from workspaces you were invited to.</p>
+    <label class="label mt-4" for="a-confirm">Type <code class="font-mono">delete my account</code> to confirm</label>
+    <input id="a-confirm" name="confirm" class="field" x-model="typed" autocomplete="off">
+    <button class="btn btn-danger mt-4" :disabled="typed !== 'delete my account'">Delete my account</button>
+  </form>
+</div>
+{% endblock %}

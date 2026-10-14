@@ -1,0 +1,28 @@
+{% extends "auth/_layout.html" %}
+{% block title %}Set up your account · CountJar{% endblock %}
+{% block form %}
+<h1 class="text-3xl font-bold">You're in. Two quick things.</h1>
+<p class="mt-2 text-muted">Tell us what to call you{% if not has_ws %} and name your first workspace{% endif %}.</p>
+<form method="post" class="mt-8 space-y-5" x-data="{ slug: {{ form.get('workspace', '') | tojson | forceescape }}, touched: false }">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div>
+    <label for="name" class="label">Your name</label>
+    <input id="name" name="name" class="field" required maxlength="60" autocomplete="name"
+           value="{{ form.get('name', current_user_obj.name if current_user_obj else '') }}" autofocus
+           @input="if (!touched) slug = $event.target.value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)">
+  </div>
+  {% if not has_ws %}
+  <div>
+    <label for="workspace" class="label">Workspace name</label>
+    <div class="flex items-center rounded-xl border border-line bg-surface focus-within:border-honey focus-within:ring-4 focus-within:ring-honey/20">
+      <span class="pl-3.5 text-sm text-muted">/api/v2/</span>
+      <input id="workspace" name="workspace" required maxlength="64" pattern="[a-z0-9][a-z0-9_\-]{0,63}"
+             class="w-full bg-transparent py-2.5 pr-3.5 text-sm outline-none" x-model="slug" @input="touched = true"
+             placeholder="my-site">
+    </div>
+    <p class="hint">Lowercase letters, numbers, - and _. It appears in every API URL, so keep it short.</p>
+  </div>
+  {% endif %}
+  <button class="btn btn-primary w-full py-3 text-base">Go to my dashboard</button>
+</form>
+{% endblock %}
