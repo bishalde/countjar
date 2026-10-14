@@ -3,28 +3,30 @@
 {% block robots %}noindex, nofollow{% endblock %}
 {% block body %}
 <div class="grid min-h-dvh lg:grid-cols-[1fr_1.1fr]">
-  <aside class="relative hidden overflow-hidden bg-[#1A1D3A] p-12 text-[#EEF2F8] dark:border-r dark:border-line dark:bg-surface lg:flex lg:flex-col lg:justify-between">
-    <a href="{{ url_for('site.landing') }}" class="flex items-center gap-2 text-lg font-bold">{{ logo("size-8") }} CountJar</a>
-    <div>
+  <aside class="relative hidden overflow-hidden bg-[#1A1D3A] px-12 py-8 text-[#EEF2F8] dark:border-r dark:border-line dark:bg-surface lg:block">
+    <div class="mx-auto flex h-full w-full max-w-md flex-col">
+    <a href="{{ url_for('site.landing') }}" class="flex h-10 items-center gap-2 text-lg font-bold">{{ logo("size-8") }} CountJar</a>
+    <div class="my-auto py-10">
       <svg viewBox="0 0 240 90" class="w-64 text-honey" aria-hidden="true">
         <g stroke="currentColor" stroke-width="7" stroke-linecap="round">
           <path d="M10 10v70M35 10v70M60 10v70M85 10v70M0 62l100-36"/>
           <path d="M130 10v70M155 10v70M180 10v70" opacity=".55"/>
         </g>
       </svg>
-      <p class="mt-10 max-w-sm text-3xl font-semibold leading-tight">Your counters, one text message away.</p>
-      <p class="mt-4 max-w-sm text-[#EEF2F8]/65">No passwords. We send a one-time code to your phone, and that's your sign-in every time.</p>
+      <p class="mt-10 text-3xl font-semibold leading-tight text-balance">Your counters, one text message away.</p>
+      <p class="mt-4 text-[#EEF2F8]/65">No passwords. We send a one-time code to your phone, and that's your sign-in every time.</p>
     </div>
     <p class="text-sm text-[#EEF2F8]/50">Codes are delivered by Twilio Verify.</p>
+    </div>
   </aside>
   <main id="main" class="flex flex-col px-4 py-8 sm:px-10">
-    <div class="flex items-center justify-between">
+    <div class="flex h-10 items-center justify-between">
       <a href="{{ url_for('site.landing') }}" class="flex items-center gap-2 font-bold lg:invisible">{{ logo("size-7") }} CountJar</a>
       <button type="button" onclick="cjTheme.toggle()" class="btn btn-ghost px-2.5" aria-label="Switch colour theme">
         <span class="dark:hidden">{{ icon("moon") }}</span><span class="hidden dark:inline">{{ icon("sun") }}</span>
       </button>
     </div>
-    <div class="mx-auto my-auto w-full max-w-sm py-10">
+    <div class="mx-auto my-auto w-full max-w-sm py-10 lg:max-w-md">
       {% block form %}{% endblock %}
     </div>
   </main>
