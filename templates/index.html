@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>Count anything with one URL.</h1>
+  <p class="muted">Page views, clicks, downloads — hit an endpoint, get a number. No account, no SDK.</p>
+  <form method="post" action="{{ url_for('open_jar') }}" class="row">
+    <input name="namespace" placeholder="your-namespace" required pattern="[a-z0-9][a-z0-9_-]{0,63}">
+    <button>Open jar</button>
+  </form>
+</section>
+
+<section>
+  <h2>API</h2>
+  <pre><code>GET {{ request.host_url }}api/v1/&lt;namespace&gt;/&lt;name&gt;/up    → +1, returns count
+GET {{ request.host_url }}api/v1/&lt;namespace&gt;/&lt;name&gt;/down  → −1, returns count
+GET {{ request.host_url }}api/v1/&lt;namespace&gt;/&lt;name&gt;       → current count</code></pre>
+  <pre><code>fetch("{{ request.host_url }}api/v1/my-site/visits/up")
+  .then(r =&gt; r.json())
+  .then(d =&gt; console.log(d.count));</code></pre>
+</section>
+{% endblock %}
