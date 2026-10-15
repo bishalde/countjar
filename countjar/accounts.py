@@ -1,5 +1,9 @@
 """Users, workspaces, membership and per-user budgets."""
+import re
+from datetime import date
 from functools import wraps
+from urllib.parse import urlsplit
+from zoneinfo import available_timezones
 
 from bson import ObjectId
 from flask import current_app, g, redirect, request, session, url_for
@@ -7,6 +11,11 @@ from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 from . import config, db
+
+EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+PROFILE_FIELDS = ("email", "birthday", "website", "company", "timezone")
+TIMEZONES = sorted(tz for tz in available_timezones()
+                   if tz == "UTC" or ("/" in tz and not tz.startswith(("Etc/", "SystemV/"))))
 
 RESERVED_SLUGS = {"api", "app", "admin", "login", "logout", "docs", "badge", "embed", "static",
                   "p", "account", "new", "settings", config.DEMO_WORKSPACE}
@@ -54,11 +63,47 @@ def login_required(view):
     return wrapped
 
 
-def update_profile(user, name):
+def update_profile(user, name, details=None):
+    """Save the name and, when given, the optional profile details (blank clears one)."""
     name = (name or "").strip()[:60]
     if not name:
         raise AccountError("Please enter your name.")
-    db.col("users").update_one({"_id": user["_id"]}, {"$set": {"name": name}})
+    fields = {"name": name}
+    if details is not None:
+        fields.update(clean_details(details))
+    db.col("users").update_one({"_id": user["_id"]}, {"$set": fields})
+
+
+def clean_details(form):
+    get = lambda key: (form.get(key) or "").strip()
+    email = get("email").lower()
+    if email and (len(email) > 254 or not EMAIL_RE.fullmatch(email)):
+        raise AccountError("Enter a valid email address, like you@example.com.")
+    birthday = get("birthday")
+    if birthday:
+        try:
+            born = date.fromisoformat(birthday)
+        except ValueError:
+            raise AccountError("Enter your birthday as a date.")
+        if not date(1900, 1, 1) <= born < date.today():
+            raise AccountError("Your birthday has to be a past date.")
+        birthday = born.isoformat()
+    website = get("website")
+    if website:
+        if "://" not in website:
+            website = "https://" + website
+        try:
+            parts = urlsplit(website)
+        except ValueError:
+            parts = None
+        if (not parts or parts.scheme not in ("http", "https") or "." not in (parts.hostname or "")
+                or len(website) > 200 or any(c.isspace() for c in website)):
+            raise AccountError("Enter a web address, like github.com/you.")
+    timezone = get("timezone")
+    if timezone and timezone not in TIMEZONES:
+        raise AccountError("Pick a time zone from the list.")
+    return {"email": email, "birthday": birthday, "website": website,
+            "company": get("company")[:80], "timezone": timezone}
 
 
 def delete_user(user):

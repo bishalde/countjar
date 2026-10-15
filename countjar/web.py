@@ -1,4 +1,7 @@
 """Dashboard: workspaces, counters, tokens, members, account. Session auth + CSRF."""
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
+
 from flask import (Blueprint, abort, flash, jsonify, make_response, redirect, render_template,
                    request, session, url_for)
 
@@ -44,7 +47,16 @@ def page(template, ws=None, role=None, **ctx):
         template, user=user, ws=ws, role=role,
         workspaces=accounts.user_workspaces(user),
         budget=accounts.budget(owner_id), usage=accounts.usage_today(owner_id),
-        **ctx)
+        reset_hint=reset_hint(user), **ctx)
+
+
+def reset_hint(user):
+    """When the daily count resets, in the user's own time zone if they set one."""
+    if user.get("timezone") not in accounts.TIMEZONES:
+        return "Resets at 00:00 UTC"
+    midnight = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    local = midnight.astimezone(ZoneInfo(user["timezone"]))
+    return f"Resets at 00:00 UTC ({local.hour % 12 or 12}:{local.minute:02d} {'am' if local.hour < 12 else 'pm'} your time)"
 
 
 def back(default):
@@ -362,12 +374,12 @@ def account():
     user = current_user()
     if request.method == "POST":
         try:
-            accounts.update_profile(user, request.form.get("name"))
+            accounts.update_profile(user, request.form.get("name"), request.form)
             flash("Profile saved.", "success")
         except AccountError as e:
             flash(str(e), "error")
         return redirect(url_for("web.account"))
-    return page("app/account.html")
+    return page("app/account.html", timezones=accounts.TIMEZONES, today=date.today().isoformat())
 
 
 @bp.post("/account/delete")
