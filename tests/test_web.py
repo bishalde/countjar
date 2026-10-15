@@ -310,3 +310,72 @@ def test_code_limit_says_how_long_to_wait(app, client):
     body = resp.get_data(as_text=True)
     assert resp.status_code == 429
     assert re.search(r"Try again in (a minute|\d+ minutes)", body)
+
+
+# --- profile details -------------------------------------------------------------
+
+PROFILE = {"name": "Ada", "email": " Ada@Example.COM ", "birthday": "1990-12-10",
+           "website": "ada.dev", "company": "Analytical Engines", "timezone": "Asia/Kolkata"}
+
+
+def me():
+    return db.col("users").find_one({"phone": "+14155550123"})
+
+
+def test_account_saves_profile_details(signed_in):
+    resp = post(signed_in, "/app/account", PROFILE, follow_redirects=True)
+    assert "Profile saved." in resp.get_data(as_text=True)
+    user = me()
+    assert user["email"] == "ada@example.com"
+    assert user["birthday"] == "1990-12-10"
+    assert user["website"] == "https://ada.dev"
+    assert user["company"] == "Analytical Engines"
+    assert user["timezone"] == "Asia/Kolkata"
+    html = signed_in.get("/app/account").get_data(as_text=True)
+    assert 'value="ada@example.com"' in html and 'value="1990-12-10"' in html
+    assert '<option value="Asia/Kolkata" selected>' in html
+
+
+def test_blank_profile_details_clear_them(signed_in):
+    post(signed_in, "/app/account", PROFILE)
+    post(signed_in, "/app/account", {"name": "Ada"})
+    user = me()
+    for field in ("email", "birthday", "website", "company", "timezone"):
+        assert user[field] == ""
+
+
+@pytest.mark.parametrize("field,value,error", [
+    ("email", "not-an-email", "valid email"),
+    ("birthday", "2999-01-01", "past date"),
+    ("birthday", "12/10/1990", "as a date"),
+    ("website", "javascript:alert(1)", "web address"),
+    ("website", "https://localhost", "web address"),
+    ("website", "my site.com", "web address"),
+    ("timezone", "Mars/Olympus", "time zone"),
+])
+def test_bad_profile_details_are_rejected(signed_in, field, value, error):
+    post(signed_in, "/app/account", PROFILE)
+    saved = me()
+    resp = post(signed_in, "/app/account", {**PROFILE, field: value}, follow_redirects=True)
+    assert error in resp.get_data(as_text=True)
+    assert me() == saved
+
+
+def test_profile_details_stay_private_from_teammates(signed_in):
+    post(signed_in, "/app/account", PROFILE)
+    owner = accounts.get_or_create_user("+14155550199")
+    accounts.update_profile(owner, "Owner")
+    team = accounts.create_workspace(owner, "team", "Team")
+    accounts.add_member(team, "+14155550123")
+    with signed_in.session_transaction() as s:
+        s["uid"] = str(owner["_id"])
+    html = signed_in.get("/app/team/members").get_data(as_text=True)
+    assert "Ada" in html
+    for secret in ("ada@example.com", "1990-12-10", "ada.dev", "Analytical Engines"):
+        assert secret not in html
+
+
+def test_reset_time_shows_in_the_users_time_zone(signed_in):
+    post(signed_in, "/app/account", PROFILE)
+    html = signed_in.get("/app/account").get_data(as_text=True)
+    assert "Resets at 00:00 UTC (5:30 am your time)" in html

@@ -5,16 +5,38 @@
 {% block content %}
 <h1 class="text-3xl font-bold">Your account</h1>
 <div class="mt-6 grid max-w-3xl gap-6">
-  <form method="post" class="panel space-y-4 p-6">
+  <form method="post" class="panel space-y-5 p-6" x-data="{ tz: {{ (user.timezone or '') | tojson | forceescape }} }">
     {{ csrf() }}
-    <div><label class="label" for="a-name">Name</label><input id="a-name" name="name" class="field" value="{{ user.name }}" maxlength="60" required></div>
-    <div><span class="label">Phone number</span><p class="font-mono">{{ user.phone }}</p><p class="hint">Verified with Twilio. It's how you sign in.</p></div>
-    <button class="btn btn-primary">Save</button>
+    <div>
+      <h2 class="font-semibold">Profile</h2>
+      <p class="mt-1 text-sm text-muted">Only you can see these details. Teammates see your name and phone number.</p>
+    </div>
+    <div class="grid gap-5 sm:grid-cols-2">
+      <div><label class="label" for="a-name">Name</label><input id="a-name" name="name" class="field" value="{{ user.name }}" maxlength="60" autocomplete="name" required></div>
+      <div><span class="label">Phone number</span><p class="py-2.5 font-mono text-sm">{{ user.phone }}</p><p class="hint">Verified with Twilio. It's how you sign in.</p></div>
+      <div><label class="label" for="a-email">Email</label><input id="a-email" name="email" type="email" class="field" value="{{ user.email or '' }}" maxlength="254" autocomplete="email" placeholder="you@example.com"><p class="hint">Optional. Not verified, and we don't send anything to it yet.</p></div>
+      <div><label class="label" for="a-birthday">Birthday</label><input id="a-birthday" name="birthday" type="date" class="field" value="{{ user.birthday or '' }}" min="1900-01-01" max="{{ today }}" autocomplete="bday"><p class="hint">Optional.</p></div>
+      <div><label class="label" for="a-website">Website or GitHub</label><input id="a-website" name="website" class="field" value="{{ user.website or '' }}" maxlength="200" inputmode="url" autocomplete="url" placeholder="github.com/you"></div>
+      <div><label class="label" for="a-company">Company or role</label><input id="a-company" name="company" class="field" value="{{ user.company or '' }}" maxlength="80" autocomplete="organization-title" placeholder="Frontend developer at Acme"></div>
+      <div class="sm:col-span-2">
+        <label class="label" for="a-timezone">Time zone</label>
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <select id="a-timezone" name="timezone" class="field" x-model="tz">
+            <option value="">Not set (UTC)</option>
+            {% for name in timezones %}<option value="{{ name }}"{% if name == user.timezone %} selected{% endif %}>{{ name | replace("_", " ") }}</option>{% endfor %}
+          </select>
+          <button type="button" class="btn btn-ghost shrink-0 self-start sm:self-auto" x-show="Intl.DateTimeFormat().resolvedOptions().timeZone !== tz"
+                  @click="const here = Intl.DateTimeFormat().resolvedOptions().timeZone; if ([...$el.previousElementSibling.options].some(o => o.value === here)) tz = here">Detect from this device</button>
+        </div>
+        <p class="hint">Shows when your daily count resets in your own time.</p>
+      </div>
+    </div>
+    <button class="btn btn-primary">Save profile</button>
   </form>
   <section class="panel space-y-4 p-6">
     <h2 class="font-semibold">Your plan</h2>
     {{ meter("Counters", budget.used, budget.limit, "Counted across every workspace you own") }}
-    {{ meter("Counts today", usage.used, usage.limit, "Resets at 00:00 UTC") }}
+    {{ meter("Counts today", usage.used, usage.limit, reset_hint) }}
   </section>
   <form method="post" action="{{ url_for('web.account_delete') }}" class="rounded-2xl border border-coral/40 p-6" x-data="{ typed: '' }">
     {{ csrf() }}
