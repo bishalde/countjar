@@ -36,7 +36,8 @@ def _hit(ws_slug, name, readonly, props=None):
     action = "up" if counter["type"] == "count" else "like"
     try:
         return counters.apply(ws, counter, action, visitor=visitors.visitor_hash(request),
-                              referrer=visitors.referrer_host(request), props=props).counter
+                              referrer=visitors.referrer_host(request), props=props,
+                              client=visitors.details(request, request.args)).counter
     except CounterError:
         return counter  # over quota etc.: still show the current value
 

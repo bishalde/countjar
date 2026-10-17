@@ -51,7 +51,12 @@
   function api(ws, name, action, params) {
     var url = BASE + "/api/v2/" + encodeURIComponent(ws) + "/" + encodeURIComponent(name) +
       (action ? "/" + action : "");
-    var q = new URLSearchParams(params || {}).toString();
+    var p = new URLSearchParams(params || {});
+    if (action) {  // counting calls say where the visit happened, for the counter's visitor details
+      p.set("_page", location.href.split("#")[0].slice(0, 300));
+      p.set("_screen", screen.width + "x" + screen.height);
+    }
+    var q = p.toString();
     return fetch(url + (q ? "?" + q : ""), { credentials: "omit" }).then(function (r) {
       return r.json().then(function (d) {
         if (!r.ok) throw new Error((d.error && d.error.message) || "CountJar error");

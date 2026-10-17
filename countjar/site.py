@@ -41,12 +41,12 @@ SOLUTIONS = {
                        "Unique visitor mode, abbreviations, themes and live analytics.",
         "keywords": ["hit counter", "website visitor counter", "page view counter", "free hit counter for website"],
         "intro": "Drop one script tag on your page and CountJar shows a live, animated view count — "
-                 "and records hourly analytics behind it. No cookies, no personal data.",
+                 "and records hourly analytics behind it: where visitors are and what they use. No cookies.",
         "points": [
             ("One line of HTML", "Works on static sites, WordPress, Ghost, Webflow, Hugo, Jekyll and more."),
             ("Unique visitors", "Count every hit, or each visitor once per day or once ever."),
             ("Looks native", "Light, dark and glass themes, custom colours, icons and labels."),
-            ("Privacy-friendly", "Visitors are identified by a salted hash; IP addresses are never stored."),
+            ("Know your visitors", "See each visit's country, city, device, browser and OS, with a breakdown on every counter."),
         ],
         "widget": "count",
         "faq": [

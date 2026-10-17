@@ -121,7 +121,9 @@ def recent_events(counter_ids, limit=20, props_filter=None):
     q = {"counter_id": {"$in": counter_ids}}
     if props_filter:
         k, _, v = props_filter.partition("=")
-        if counters.PROP_KEY.match(k):
+        if k in CLIENT_FILTERS:
+            q[f"client.{k}"] = v
+        elif counters.PROP_KEY.match(k):
             q[f"props.{k}"] = v
     return list(db.col("events").find(q).sort("ts", -1).limit(limit))
 
@@ -136,15 +138,61 @@ def top_referrers(counter_id, days=7, limit=5):
     ]))
 
 
-EVENT_FIELDS = ["ts", "action", "delta", "value", "visitor", "referrer", "props"]
+# Visitor details on each event (see visitors.details). The IP is only shown to workspace owners.
+CLIENT_FIELDS = ["device", "model", "browser", "os", "country", "region", "city", "postal",
+                 "lat", "lon", "tz", "lang", "page", "screen"]
+CLIENT_FILTERS = {"device", "browser", "os", "country", "city"}  # ?filter=country=IN etc.
+EVENT_FIELDS = ["ts", "action", "delta", "value", "visitor", "referrer", "props", *CLIENT_FIELDS]
 
 
-def event_rows(events):
-    return [{
-        "ts": counters._iso(e["ts"]), "action": e["action"], "delta": e.get("delta"),
-        "value": e.get("value"), "visitor": (e.get("visitor") or "")[:12],
-        "referrer": e.get("referrer") or "", "props": e.get("props") or {},
-    } for e in events]
+def event_fields(include_ip=False):
+    return EVENT_FIELDS + ["ip"] if include_ip else EVENT_FIELDS
+
+
+def event_rows(events, include_ip=False):
+    rows = []
+    for e in events:
+        client = e.get("client") or {}
+        row = {
+            "ts": counters._iso(e["ts"]), "action": e["action"], "delta": e.get("delta"),
+            "value": e.get("value"), "visitor": (e.get("visitor") or "")[:12],
+            "referrer": e.get("referrer") or "", "props": e.get("props") or {},
+            **{f: client.get(f) for f in CLIENT_FIELDS},
+        }
+        if include_ip:
+            row["ip"] = client.get("ip")
+        rows.append(row)
+    return rows
+
+
+def _top(match, group, limit=None):
+    pipeline = [{"$match": match}, {"$group": {"_id": group, "n": {"$sum": 1}}},
+                {"$sort": {"n": -1}}]
+    return list(db.col("events").aggregate(pipeline + ([{"$limit": limit}] if limit else [])))
+
+
+def _version_free(name):
+    # "Chrome 141" and "Chrome 140" are one browser; "Android 14" and "Android 13" are one OS.
+    head, _, tail = name.rpartition(" ")
+    return head if head and tail[:1].isdigit() else name
+
+
+def visitor_breakdown(counter_id, days=7, limit=6):
+    """Where visits came from and what they used, over the last `days`."""
+    match = {"counter_id": counter_id, "ts": {"$gte": db.now() - timedelta(days=days)},
+             "client": {"$type": "object"}}
+    out = {"total": db.col("events").count_documents(match)}
+    for key in ("country", "device", "browser", "os"):
+        merged = {}
+        for r in _top({**match, f"client.{key}": {"$type": "string"}}, f"$client.{key}"):
+            name = _version_free(r["_id"]) if key in ("browser", "os") else r["_id"]
+            merged[name] = merged.get(name, 0) + r["n"]
+        out[key] = [{"name": k, "n": v} for k, v in
+                    sorted(merged.items(), key=lambda kv: (-kv[1], kv[0]))[:limit]]
+    out["city"] = [{"name": r["_id"]["city"], "country": r["_id"].get("country"), "n": r["n"]}
+                   for r in _top({**match, "client.city": {"$type": "string"}},
+                                 {"city": "$client.city", "country": "$client.country"}, limit)]
+    return out
 
 
 def _cell(v):

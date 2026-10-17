@@ -29,6 +29,7 @@ ACTIONS = {
 PUBLIC_ACTIONS = {"up", "like", "vote", "rate"}
 
 PROP_KEY = re.compile(r"^[A-Za-z0-9_]{1,32}$")
+CLIENT_PARAMS = {"_page", "_screen"}  # visitor details, not props; see visitors.details
 
 Result = namedtuple("Result", "counter counted")
 
@@ -158,7 +159,7 @@ def delete_counter(counter):
 def clean_props(args, reserved=()):
     props = {}
     for k, v in args.items():
-        if k in reserved or not PROP_KEY.match(k):
+        if k in reserved or k in CLIENT_PARAMS or not PROP_KEY.match(k):
             continue
         props[k] = str(v)[:200]
         if len(props) >= 10:
@@ -200,7 +201,7 @@ def _claim_mark(counter, kind, visitor, ttl=None):
 
 
 def apply(ws, counter, action, *, by=None, value=None, choice=None,
-          visitor=None, referrer=None, props=None):
+          visitor=None, referrer=None, props=None, client=None):
     ctype = counter["type"]
     if action not in ACTIONS[ctype]:
         raise CounterError("unsupported_action", f"“{action}” isn't available on a {ctype} counter.")
@@ -295,17 +296,18 @@ def apply(ws, counter, action, *, by=None, value=None, choice=None,
     if action in ("like", "vote", "rate"):
         old = doc["count"] - 1  # each of these is a single atomic +1
     new = doc["count"]
-    _record(ws, doc, action, new - old, record_value, visitor, referrer, props or {}, ts)
+    _record(ws, doc, action, new - old, record_value, visitor, referrer, props or {}, client, ts)
     if new > old:
         from . import notify
         notify.check(ws, doc, old, new)
     return Result(doc, True)
 
 
-def _record(ws, counter, action, delta, value, visitor, referrer, props, ts):
+def _record(ws, counter, action, delta, value, visitor, referrer, props, client, ts):
     db.col("events").insert_one({
         "counter_id": counter["_id"], "workspace_id": ws["_id"], "ts": ts, "action": action,
         "delta": delta, "value": value, "visitor": visitor, "referrer": referrer, "props": props,
+        "client": client,
     })
     hour = ts.replace(minute=0, second=0, microsecond=0)
     db.col("buckets").update_one(
