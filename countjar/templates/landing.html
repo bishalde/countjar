@@ -21,7 +21,7 @@
       {"@type": "Question", "name": "Is CountJar free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Every account gets 5 counters and 10,000 counts per day at no cost."}},
       {"@type": "Question", "name": "How do I sign up?", "acceptedAnswer": {"@type": "Answer", "text": "Enter your mobile number and type in the 6-digit code we text you. There is no password to remember."}},
       {"@type": "Question", "name": "Can I use CountJar from the browser?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. The API allows cross-origin requests, so you can call public counters with fetch() from any website."}},
-      {"@type": "Question", "name": "Do you store visitor IP addresses?", "acceptedAnswer": {"@type": "Answer", "text": "No. Visitors are identified by a keyed hash so unique counts work without keeping IP addresses."}}
+      {"@type": "Question", "name": "What do you record about visitors?", "acceptedAnswer": {"@type": "Answer", "text": "Each visit records its country, city, device, browser, OS, language and IP address, so you can see who your visitors are. Only the workspace owner sees IP addresses, and raw events are deleted after 90 days."}}
     ]}
   ]
 } | tojson }}
@@ -167,7 +167,7 @@ print(r.json()["count"])</code></pre>
     <div class="mt-10 grid gap-x-16 md:grid-cols-2">
       {% for ic, title, text in [
         ("lock", "Private counters and scoped tokens", "Keep a counter private and give each app a token that can only read, only write, or also manage counters. Tokens are shown once and stored hashed."),
-        ("users", "Unique visitors", "Count every hit, each visitor once a day, or each visitor once ever. Visitors are a keyed hash, never a stored IP address."),
+        ("users", "Visitor details", "See where visits come from and what they used: country, city, device, browser and OS. Count every hit, or each visitor once a day or once ever."),
         ("bell", "Milestone alerts", "Get a signed webhook or a text message when a counter passes 1,000, 10,000 or any number you choose."),
         ("chart", "History and exports", "Hourly and daily charts for 24 hours, 7 days and 30 days. Download events or history as CSV or JSON."),
         ("hash", "Steps, bounds and starting values", "Increment by 5, never drop below 0, cap at 100 seats, or start at 42,000 to carry over an old total."),
@@ -212,7 +212,7 @@ print(r.json()["count"])</code></pre>
         ("Is CountJar free?", "Yes. Every account gets 5 counters and 10,000 counts per day at no cost."),
         ("How do I sign up?", "Enter your mobile number and type in the 6-digit code we text you. There is no password to remember."),
         ("Can I call the API from the browser?", "Yes. The API sends Access-Control-Allow-Origin: *, so fetch() works from any website for public counters."),
-        ("Do you store visitor IP addresses?", "No. Visitors are identified by a keyed hash so unique counts work without keeping IP addresses."),
+        ("What do you record about visitors?", "Each visit records its country, city, device, browser, OS, language and IP address, so you can see who your visitors are. Only the workspace owner sees IP addresses, and raw events are deleted after 90 days."),
         ("What happens when I hit a limit?", "The API answers 429 with a clear error code and a Retry-After header. Daily limits reset at midnight UTC."),
       ] %}
       <details class="group py-5">

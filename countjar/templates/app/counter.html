@@ -4,6 +4,7 @@
 {% set active = "counters" %}
 {% set base = site_url %}
 {% set api_url = base ~ "/api/v2/" ~ ws.slug ~ "/" ~ counter.name %}
+{% set device_icons = {"desktop": "monitor", "phone": "smartphone", "tablet": "tablet", "bot": "bot"} %}
 {% set primary_action = {"count": "up", "like": "like", "poll": "vote?choice=yes", "rating": "rate?value=5"}[counter.type] %}
 {% block title %}{{ counter.name }} · {{ ws.name }} · CountJar{% endblock %}
 {% block head %}
@@ -115,6 +116,37 @@
     {% endfor %}
   </ul>
   {% else %}<p class="mt-3 text-sm text-muted">No referrers yet. They appear when the widget, badge or API is called from a web page.</p>{% endif %}
+</section>
+
+<section class="panel mt-6 p-5">
+  <div class="flex flex-wrap items-baseline justify-between gap-2">
+    <h2 class="font-semibold">Visitors, last 7 days</h2>
+    {% if visitors.total %}<a class="text-sm text-muted hover:text-ink" href="?tab=events">{{ visitors.total | intcomma }} visits with details · see each one</a>{% endif %}
+  </div>
+  {% if visitors.total %}
+  <div class="mt-4 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
+    {% for key, title in [("country", "Countries"), ("city", "Cities"), ("device", "Devices"), ("browser", "Browsers"), ("os", "Operating systems")] %}
+    <div>
+      <h3 class="text-xs font-medium uppercase tracking-wide text-muted">{{ title }}</h3>
+      {% if visitors[key] %}
+      <ul class="mt-3 space-y-2.5 text-sm">
+        {% for r in visitors[key] %}
+        {% set pct = (100 * r.n / visitors.total) | round | int %}
+        <li><div class="flex items-center justify-between gap-3">
+            <span class="flex min-w-0 items-center gap-2 truncate">
+              {%- if key == "country" %}<span aria-hidden="true">{{ r.name | flag }}</span><span data-country="{{ r.name }}">{{ r.name }}</span>
+              {%- elif key == "city" %}<span aria-hidden="true">{{ r.country | flag }}</span>{{ r.name }}
+              {%- elif key == "device" %}<span class="text-muted">{{ icon(device_icons.get(r.name, "monitor"), "size-3.5") }}</span>{{ r.name | capitalize }}
+              {%- else %}{{ r.name }}{% endif %}</span>
+            <span class="shrink-0 font-mono text-xs text-muted">{{ pct }}%</span></div>
+          <div class="mt-1 h-1.5 rounded-full bg-sunken"><div class="h-full rounded-full bg-honey" style="width: {{ pct }}%"></div></div></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="mt-3 text-sm text-muted">Not known yet.</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p class="mt-3 text-sm text-muted">No visitor details yet. Each new visit records its country, city, device, browser and OS.</p>{% endif %}
 </section>
 
 {% elif tab == "embed" %}
@@ -291,7 +323,7 @@ console.log((await res.json()).count);</code></pre>
 <div class="mt-6 flex flex-wrap items-end justify-between gap-3">
   <form method="get" class="flex gap-2">
     <input type="hidden" name="tab" value="events">
-    <input name="filter" value="{{ prop_filter }}" class="field w-64 font-mono" placeholder="campaign=spring" aria-label="Filter by property">
+    <input name="filter" value="{{ prop_filter }}" class="field w-64 font-mono" placeholder="country=IN or campaign=spring" aria-label="Filter by property or visitor detail">
     <button class="btn btn-outline">Filter</button>
     {% if prop_filter %}<a href="?tab=events" class="btn btn-ghost">Clear</a>{% endif %}
   </form>
@@ -313,7 +345,29 @@ console.log((await res.json()).count);</code></pre>
         <td class="whitespace-nowrap px-4 py-3 text-muted" title="{{ e.ts }}">{{ e.ts[:19] | replace("T", " ") }}</td>
         <td class="whitespace-nowrap px-4 py-3 font-medium">{{ event_label(e) }}</td>
         <td class="px-4 py-3 font-mono {{ 'text-mint' if (e.delta or 0) > 0 else 'text-coral' if (e.delta or 0) < 0 else 'text-muted' }}">{{ "%+d" | format(e.delta) if e.delta else (e.value if e.value is not none else "·") }}</td>
-        <td class="px-4 py-3 font-mono text-xs text-muted">{{ e.visitor or "dashboard" }}</td>
+        <td class="min-w-56 px-4 py-3">
+          {%- if e.device %}
+          <div class="flex items-center gap-1.5">
+            <a href="?tab=events&filter=device={{ e.device }}" class="text-muted hover:text-ink" title="{{ e.device | capitalize }}">{{ icon(device_icons.get(e.device, "monitor"), "size-3.5") }}</a>
+            <span>{{ [e.browser, e.os] | select | join(" · ") or e.device | capitalize }}</span>
+            {% if e.model %}<span class="text-muted">· {{ e.model }}</span>{% endif %}
+          </div>
+          {%- endif %}
+          {%- if e.country %}
+          <div class="mt-0.5 flex items-center gap-1.5 text-muted">
+            <a href="?tab=events&filter=country={{ e.country }}" class="hover:text-ink" title="Show visits from {{ e.country }}">{{ e.country | flag }}</a>
+            <span>{{ [e.city, e.region, e.country] | select | join(", ") }}</span>
+            {% if e.lat is not none and e.lon is not none %}<a href="https://www.openstreetmap.org/?mlat={{ e.lat }}&mlon={{ e.lon }}#map=11/{{ e.lat }}/{{ e.lon }}" target="_blank" rel="noopener" class="hover:text-ink" title="Approximate location on a map">{{ icon("pin", "size-3.5") }}</a>{% endif %}
+          </div>
+          {%- endif %}
+          <div class="mt-0.5 font-mono text-[11px] text-muted">
+            {{- e.visitor or "dashboard" }}
+            {%- if e.ip %} · <span title="IP address, visible to the workspace owner">{{ e.ip }}</span>{% endif %}
+            {%- if e.lang %} · {{ e.lang }}{% endif %}
+            {%- if e.screen %} · {{ e.screen }}{% endif %}
+          </div>
+          {%- if e.page %}<div class="mt-0.5 max-w-xs truncate text-xs text-muted" title="{{ e.page }}">{{ e.page }}</div>{% endif %}
+        </td>
         <td class="px-4 py-3 text-muted">{{ e.referrer or "" }}</td>
         <td class="px-4 py-3">{% for k, v in e.props.items() %}<a href="?tab=events&filter={{ k }}={{ v | urlencode }}" class="chip mr-1 bg-sunken font-mono text-[11px] text-muted hover:text-ink">{{ k }}={{ v }}</a>{% endfor %}</td>
       </tr>
@@ -324,7 +378,7 @@ console.log((await res.json()).count);</code></pre>
   <p class="p-8 text-center text-sm text-muted">{{ "No events match that filter." if prop_filter else "No events yet." }}</p>
   {% endif %}
 </div>
-<p class="mt-3 text-xs text-muted">Showing the latest 50. Exports include up to 5,000. Raw events are kept for 90 days; charts keep hourly totals for longer.</p>
+<p class="mt-3 text-xs text-muted">Showing the latest 50. Exports include up to 5,000. Raw events are kept for 90 days; charts keep hourly totals for longer. Filter by a property, or by <code class="font-mono">country</code>, <code class="font-mono">city</code>, <code class="font-mono">device</code>, <code class="font-mono">browser</code> or <code class="font-mono">os</code>. {% if role == "owner" %}Only you, as the owner, can see visitors' IP addresses.{% else %}Only the workspace owner can see visitors' IP addresses.{% endif %}</p>
 
 {% elif tab == "settings" %}
 <div class="mt-6 grid gap-6 lg:grid-cols-[1.4fr_1fr]">

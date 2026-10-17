@@ -113,3 +113,6 @@ def register_filters(app):
     app.jinja_env.filters["abbreviate"] = abbreviate
     app.jinja_env.filters["timeago"] = timeago
     app.jinja_env.filters["intcomma"] = lambda n: f"{n or 0:,}"
+    # "IN" -> 🇮🇳: two regional-indicator letters make a flag.
+    app.jinja_env.filters["flag"] = lambda cc: "".join(chr(0x1F1A5 + ord(c)) for c in cc.upper()) \
+        if cc and len(cc) == 2 and cc.isalpha() else ""

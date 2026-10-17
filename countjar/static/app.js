@@ -13,6 +13,16 @@
     },
   };
 
+  // ---------- country names ----------
+  // Templates print ISO codes; the browser knows every country's name in the reader's language.
+  document.addEventListener("DOMContentLoaded", () => {
+    let names;
+    try { names = new Intl.DisplayNames([navigator.language, "en"], { type: "region" }); } catch (e) { return; }
+    document.querySelectorAll("[data-country]").forEach((el) => {
+      try { el.textContent = names.of(el.dataset.country) || el.textContent; } catch (e) {}
+    });
+  });
+
   // ---------- odometer ----------
   function odometer(el, value) {
     const text = Number(value || 0).toLocaleString("en-US");

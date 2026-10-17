@@ -1,6 +1,6 @@
 {% extends "docs/_layout.html" %}
 {% from "docs/_macros.html" import code, note, params %}
-{% set toc = [("basics", "Basics"), ("counter-object", "The counter object"), ("read", "Read a counter"), ("up", "Count up"), ("down", "Count down"), ("set", "Set a value"), ("reset", "Reset"), ("like", "Like"), ("vote", "Vote"), ("rate", "Rate"), ("unique", "Unique visitors"), ("props", "Custom properties"), ("stats", "Stats"), ("history", "History"), ("events", "Events"), ("workspace", "Workspace summary"), ("create", "Create a counter"), ("update", "Change a counter"), ("delete", "Delete a counter")] %}
+{% set toc = [("basics", "Basics"), ("counter-object", "The counter object"), ("read", "Read a counter"), ("up", "Count up"), ("down", "Count down"), ("set", "Set a value"), ("reset", "Reset"), ("like", "Like"), ("vote", "Vote"), ("rate", "Rate"), ("unique", "Unique visitors"), ("props", "Custom properties"), ("visitor-details", "Visitor details"), ("stats", "Stats"), ("history", "History"), ("events", "Events"), ("workspace", "Workspace summary"), ("create", "Create a counter"), ("update", "Change a counter"), ("delete", "Delete a counter")] %}
 {% set base = site_url ~ "/api/v2" %}
 {% block content %}
 <h1>API reference</h1>
@@ -109,7 +109,7 @@
     <tr><td><code>once</code></td><td>Each visitor counts once, ever, until the counter is reset.</td></tr>
   </tbody>
 </table></div>
-<p>A visitor is recognised by a keyed fingerprint of their IP address and browser. CountJar never stores the IP address itself. Likes, votes and ratings are always one per visitor, whatever this option says.</p>
+<p>A visitor is recognised by a keyed fingerprint of their IP address and browser. Likes, votes and ratings are always one per visitor, whatever this option says.</p>
 {% call note() %}If you count from your own server, every request comes from the same IP, so unique counting would treat all your users as one visitor. Use <code>none</code> for server-side counters.{% endcall %}
 
 <h2 id="props">Custom properties</h2>
@@ -117,6 +117,18 @@
 {% call code("bash") %}curl "{{ base }}/acme/downloads/up?version=2.1&platform=mac"{% endcall %}
 <p>Names can use letters, digits and underscores, up to 32 characters. Values are kept as text, up to 200 characters, and up to 10 properties are saved per event. These names are reserved and never saved: <code>token</code>, <code>by</code>, <code>value</code>, <code>choice</code>, <code>window</code>, <code>format</code>, <code>range</code> and <code>limit</code>.</p>
 <p>Filter <a href="#events">events</a> by a property with <code>?filter=platform=mac</code>.</p>
+
+<h3 id="visitor-details">Visitor details</h3>
+<p>Every counting action also records who made it, for the counter's Visitors panel and Events log:</p>
+<ul>
+  <li><strong>Location:</strong> country, region, city, postal code, approximate coordinates and time zone, looked up from the IP address.</li>
+  <li><strong>Device:</strong> desktop, phone, tablet or bot, the model where the browser reports it, the browser and the operating system.</li>
+  <li><strong>Language:</strong> the visitor's preferred language.</li>
+  <li><strong>IP address:</strong> stored with the event, and shown only to the workspace owner.</li>
+</ul>
+<p>The widget also sends the page address and screen size. To send them yourself, add <code>_page</code> (a full <code>https://</code> address) and <code>_screen</code> (for example <code>1440x900</code>):</p>
+{% call code("js") %}fetch(`{{ base }}/api/v2/acme/visits/up?_page=${encodeURIComponent(location.href)}&_screen=${screen.width}x${screen.height}`){% endcall %}
+{% call note() %}Badges in a GitHub README are fetched by GitHub's image proxy, not by the reader's browser, so those visits show up as a bot with GitHub's location. They still count.{% endcall %}
 
 <h2 id="stats">Stats</h2>
 <h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/stats</code></h3>
@@ -158,10 +170,10 @@
 
 <h2 id="events">Events</h2>
 <h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;/&lt;counter&gt;/events</code></h3>
-<p>The individual changes, newest first. Needs a <code>read</code> token, even for public counters, because events include referrers and custom properties.</p>
+<p>The individual changes, newest first. Needs a <code>read</code> token, even for public counters, because events include visitor details, referrers and custom properties.</p>
 {{ params([
   ("limit", "How many to return, from 1 to 1,000. Defaults to 100."),
-  ("filter", "Only events with this custom property, written <code>name=value</code>."),
+  ("filter", "Only events with this custom property, written <code>name=value</code>. Also works with <code>country</code>, <code>city</code>, <code>device</code>, <code>browser</code> and <code>os</code>, for example <code>country=IN</code>."),
   ("format", "<code>csv</code> to download a spreadsheet instead of JSON."),
 ]) }}
 {% call code("json") %}{
@@ -175,11 +187,25 @@
       "value": null,
       "visitor": "3f9a1c07be52",
       "referrer": "github.com",
-      "props": { "version": "2.1", "platform": "mac" }
+      "props": { "version": "2.1", "platform": "mac" },
+      "device": "phone",
+      "model": "Pixel 8",
+      "browser": "Chrome 141",
+      "os": "Android 14",
+      "country": "IN",
+      "region": "KA",
+      "city": "Bengaluru",
+      "postal": "560001",
+      "lat": 12.972,
+      "lon": 77.594,
+      "tz": "Asia/Kolkata",
+      "lang": "en-IN",
+      "page": "https://example.com/blog/hello",
+      "screen": "412x915"
     }
   ]
 }{% endcall %}
-<p><code>visitor</code> is a shortened fingerprint, useful for spotting repeat visitors. <code>referrer</code> is only the host name of the page the request came from.</p>
+<p><code>visitor</code> is a shortened fingerprint, useful for spotting repeat visitors. <code>referrer</code> is only the host name of the page the request came from. The <a href="#visitor-details">visitor details</a> are <code>null</code> when unknown. IP addresses are left out of the API; the workspace owner sees them in the dashboard and its exports.</p>
 
 <h2 id="workspace">Workspace summary</h2>
 <h3><span class="method method-get">GET</span><code>/api/v2/&lt;workspace&gt;</code></h3>

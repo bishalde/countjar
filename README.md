@@ -43,7 +43,6 @@ Leave the action off to read the value. With an API token you can also subtract
   **Private** counters need an API token for every request.
 - Step size, minimum and maximum values, and **unique visitors**, so each visitor
   counts once a day or once ever.
-- Visitors are identified by a salted hash. IP addresses are never stored.
 
 **Showing the number**
 - **Widgets** with one line of HTML: view counter, like button, poll and star rating.
@@ -57,6 +56,10 @@ Leave the action off to read the value. With an API token you can also subtract
   export.
 - Today, last 7 days and unique visitors at a glance, top referrers, and a log of
   every event.
+- **Visitor details** on every visit: country, region, city, device type and model,
+  browser, OS, language, page and screen size, with a breakdown by country, city,
+  device, browser and OS. IP addresses are recorded too and shown only to the
+  workspace owner. Raw events are deleted after 90 days.
 - A workspace overview with activity across all counters and the top counters.
 - 90 days of raw event history.
 

@@ -191,6 +191,7 @@ def mutate(action):
             visitor=visitors.visitor_hash(request),
             referrer=visitors.referrer_host(request),
             props=counters.clean_props(p, RESERVED_PARAMS),
+            client=visitors.details(request, p),
         )
         return jsonify(**counters.serialize(res.counter, ws["slug"]), counted=res.counted)
     return handler

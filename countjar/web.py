@@ -146,7 +146,9 @@ def counter_detail(ws_slug, name):
     ctx = dict(counter=counter, tab=tab, data=counters.serialize(counter, ws_slug),
                stats=stats.counter_stats(counter), milestones=notify.list_milestones(counter),
                referrers=stats.top_referrers(counter["_id"]),
-               events=stats.event_rows(stats.recent_events([counter["_id"]], 50, prop_filter)),
+               visitors=stats.visitor_breakdown(counter["_id"]) if tab == "overview" else None,
+               events=stats.event_rows(stats.recent_events([counter["_id"]], 50, prop_filter),
+                                       include_ip=role == "owner"),
                prop_filter=prop_filter or "")
     return page("app/counter.html", ws, role, **ctx)
 
@@ -215,7 +217,7 @@ def counter_history(ws_slug, name):
 @bp.get("/<ws_slug>/c/<name>/export.<fmt>")
 @login_required
 def counter_export(ws_slug, name, fmt):
-    ws, _ = workspace_or_404(ws_slug)
+    ws, role = workspace_or_404(ws_slug)
     counter = counter_or_404(ws, name)
     kind = request.args.get("kind", "events")
     if kind == "history":
@@ -226,8 +228,9 @@ def counter_export(ws_slug, name, fmt):
         fields = ["t", "ups", "downs", "net", "events"]
     else:
         rows = stats.event_rows(stats.recent_events([counter["_id"]], 5000,
-                                                    request.args.get("filter")))
-        fields = stats.EVENT_FIELDS
+                                                    request.args.get("filter")),
+                                include_ip=role == "owner")
+        fields = stats.event_fields(include_ip=role == "owner")
     filename = f"{ws_slug}-{name}-{kind}.{fmt}"
     if fmt == "csv":
         resp = make_response(stats.to_csv(rows, fields))

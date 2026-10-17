@@ -81,7 +81,7 @@ X-RateLimit-Remaining: 587{% endcall %}
 <p>Yes. Use a public counter with the <a href="/docs/widgets">widget</a>, a <a href="/docs/widgets#badges">badge</a>, or a <code>fetch</code> call. None of them need a server or a token.</p>
 
 <h3>Does CountJar store visitors' IP addresses?</h3>
-<p>No. To recognise repeat visitors it keeps a keyed fingerprint made from the IP address and browser, which can't be turned back into either. Events also keep the host name of the page the request came from, if the browser sends one.</p>
+<p>Yes. Each event keeps the visitor's IP address, together with the location looked up from it and their device, browser and language (see <a href="/docs/api#visitor-details">visitor details</a>). Only the workspace owner can see IP addresses. Raw events, IP addresses included, are deleted after 90 days. Repeat visitors are recognised by a keyed fingerprint of the IP address and browser.</p>
 
 <h3>How do I get more than 5 counters?</h3>
 <p>Every account gets 5. Free one up by deleting a counter you no longer need. A poll or rating counter can often replace several normal ones, and <a href="/docs/api#props">custom properties</a> let one counter track many things, such as every issue of a newsletter.</p>
